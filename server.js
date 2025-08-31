@@ -262,8 +262,8 @@ class PokerGame {
       throw new Error('Game is full');
     }
 
-    // Check for duplicate player names
-    const existingPlayer = Object.values(this.players).find(p => p.name === playerName);
+    // Check for duplicate player names (but allow same playerId to rejoin)
+    const existingPlayer = Object.values(this.players).find(p => p.name === playerName && p.id !== playerId);
     if (existingPlayer) {
       throw new Error('Player name already exists');
     }
@@ -285,7 +285,17 @@ class PokerGame {
       this.admin = playerId;
     }
 
+    this.updateActivity();
     return this.players[playerId];
+  }
+
+  rejoinPlayer(playerId) {
+    const player = this.players[playerId];
+    if (player) {
+      this.updateActivity();
+      return player;
+    }
+    return null;
   }
 
   removePlayer(playerId) {
@@ -746,21 +756,32 @@ io.on('connection', (socket) => {
     }
 
     try {
-      const player = game.addPlayer(data.playerId, data.playerName);
+      // Try to rejoin first (for refresh scenarios)
+      let player = game.rejoinPlayer(data.playerId);
+      let isRejoining = !!player;
+      
+      if (!player) {
+        // Add as new player
+        player = game.addPlayer(data.playerId, data.playerName);
+      }
+      
       socket.join(data.roomCode);
       
       socket.emit('roomJoined', {
         roomCode: data.roomCode,
-        gameState: game.getGameState()
+        gameState: game.getGameState(),
+        isRejoining: isRejoining
       });
 
-      io.to(data.roomCode).emit('gameStateUpdate', game.getGameState());
-      socket.broadcast.to(data.roomCode).emit('playerJoined', {
-        playerId: data.playerId,
-        playerName: data.playerName
-      });
-
-      console.log(`${data.playerName} joined room ${data.roomCode}`);
+      if (!isRejoining) {
+        socket.broadcast.to(data.roomCode).emit('playerJoined', {
+          playerId: data.playerId,
+          playerName: data.playerName
+        });
+        console.log(`${data.playerName} joined room ${data.roomCode}`);
+      } else {
+        console.log(`${data.playerName} rejoined room ${data.roomCode}`);
+      }
     } catch (error) {
       socket.emit('error', { message: error.message });
     }

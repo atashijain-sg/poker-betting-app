@@ -415,6 +415,7 @@
                 <button class="button" onclick="startGame()" id="startGameBtn">Start Game</button>
                 <button class="button" onclick="newHand()" id="newHandBtn" style="display: none;">New Hand</button>
                 <button class="button" onclick="resetGame()" id="resetGameBtn">Reset Game</button>
+                <button class="button" onclick="leaveGame()" style="background: #ff4444;">Leave Game</button>
             </div>
 
             <div class="betting-history">
@@ -444,13 +445,37 @@
         let validActions = [];
         let currentBetAction = '';
 
-        // Generate unique player ID
-        playerId = 'player_' + Math.random().toString(36).substr(2, 9);
+        // Generate or restore player ID from localStorage
+        playerId = localStorage.getItem('pokerId') || 'player_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('pokerId', playerId);
+
+        // Auto-rejoin on page load if session exists
+        window.addEventListener('load', () => {
+            const savedName = localStorage.getItem('pokerName');
+            const savedRoom = localStorage.getItem('pokerRoom');
+            
+            if (savedName && savedRoom) {
+                document.getElementById('playerName').value = savedName;
+                document.getElementById('roomCode').value = savedRoom;
+                playerName = savedName;
+                
+                // Auto-rejoin
+                socket.emit('joinRoom', { 
+                    playerId: playerId, 
+                    playerName: savedName, 
+                    roomCode: savedRoom 
+                });
+            }
+        });
 
         // Socket event listeners
         socket.on('roomJoined', (data) => {
             currentRoomCode = data.roomCode;
             gameState = data.gameState;
+            
+            // Save session to localStorage
+            localStorage.setItem('pokerRoom', currentRoomCode);
+            localStorage.setItem('pokerName', playerName);
             
             document.getElementById('roomCodeValue').textContent = currentRoomCode;
             document.getElementById('currentRoomCode').style.display = 'block';
@@ -458,7 +483,12 @@
             document.getElementById('gameArea').style.display = 'block';
             
             updateGameDisplay();
-            showSuccess('Successfully joined room: ' + currentRoomCode);
+            
+            if (data.isRejoining) {
+                showSuccess('Rejoined room: ' + currentRoomCode);
+            } else {
+                showSuccess('Successfully joined room: ' + currentRoomCode);
+            }
         });
 
         socket.on('playerJoined', (data) => {
@@ -540,6 +570,8 @@
             }
             
             playerName = name;
+            // Clear any existing session before creating new room
+            localStorage.removeItem('pokerRoom');
             socket.emit('createRoom', { playerId: playerId, playerName: name });
         }
 
@@ -573,6 +605,9 @@
 
         function resetGame() {
             if (!currentRoomCode) return;
+            // Clear session when resetting
+            localStorage.removeItem('pokerRoom');
+            localStorage.removeItem('pokerName');
             socket.emit('resetGame', { roomCode: currentRoomCode });
         }
 
@@ -613,6 +648,18 @@
             });
             
             cancelPotEdit();
+        }
+
+        function leaveGame() {
+            if (confirm('Are you sure you want to leave the game?')) {
+                // Clear session
+                localStorage.removeItem('pokerRoom');
+                localStorage.removeItem('pokerName');
+                localStorage.removeItem('pokerId');
+                
+                // Reload page to start fresh
+                window.location.reload();
+            }
         }
 
         function performAction(action, amount = 0) {
