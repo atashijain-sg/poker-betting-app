@@ -288,6 +288,16 @@
             margin-left: 5px;
         }
 
+        .original-admin-badge {
+            background: #ff6600;
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+
         .delete-btn {
             position: absolute;
             top: 25px;
@@ -512,6 +522,12 @@
 
             <button class="button" onclick="joinGame()">Join Game</button>
             
+            <div id="adminReclaimSection" style="display: none; margin-top: 20px; padding: 15px; background: rgba(255,204,0,0.2); border-radius: 8px;">
+                <h4 style="color: #ffcc00; margin-bottom: 10px;">👑 Admin Recovery</h4>
+                <p style="font-size: 14px; margin-bottom: 10px;">You were the original admin. Reclaim your admin privileges?</p>
+                <button class="button" onclick="reclaimAdmin()" style="background: #ffcc00; color: #000;">Reclaim Admin</button>
+            </div>
+            
             <p style="margin-top: 15px; font-size: 14px; opacity: 0.8;">
                 Everyone joins the same game - no room codes needed!
             </p>
@@ -631,6 +647,11 @@
         // Display session ID
         document.getElementById('sessionId').textContent = playerId;
 
+        // Check for admin reclaim on page load
+        setTimeout(() => {
+            updateAdminReclaimButton();
+        }, 500);
+
         // Auto-rejoin on page load if session exists
         window.addEventListener('load', () => {
             // Small delay to prevent immediate flickering
@@ -664,6 +685,7 @@
             updateStartingPlayerControls();
             updatePlayerOrderControls();
             updateWinnerControls();
+            updateAdminReclaimButton();
             
             if (data.isRejoining) {
                 showSuccess('Rejoined the game');
@@ -752,6 +774,13 @@
             updateGameDisplay();
             updatePlayerOrderControls();
             showSuccess('Player order updated!');
+        });
+
+        socket.on('adminReclaimed', (data) => {
+            gameState = data.gameState;
+            updateGameDisplay();
+            updateAdminReclaimButton();
+            showSuccess(`👑 ${data.newAdminName} reclaimed admin privileges`);
         });
 
 
@@ -971,6 +1000,27 @@
             });
         }
 
+        function reclaimAdmin() {
+            socket.emit('reclaimAdmin', {
+                playerId: playerId
+            });
+        }
+
+        function updateAdminReclaimButton() {
+            const section = document.getElementById('adminReclaimSection');
+            
+            // Show reclaim button if:
+            // 1. User is original admin but not current admin
+            // 2. Currently in game setup (not in game area)
+            if (gameState.originalAdmin === playerId && 
+                gameState.admin !== playerId && 
+                document.getElementById('gameSetup').style.display !== 'none') {
+                section.style.display = 'block';
+            } else {
+                section.style.display = 'none';
+            }
+        }
+
         function performAction(action, amount = 0) {
             if (!currentRoomCode) return;
             socket.emit('performAction', { 
@@ -1185,6 +1235,9 @@
             let adminBadge = '';
             if (player.id === gameState.admin) {
                 adminBadge = '<span class="admin-badge">ADMIN</span>';
+            }
+            if (player.id === gameState.originalAdmin && player.id !== gameState.admin) {
+                adminBadge += '<span class="original-admin-badge">ORIGINAL</span>';
             }
 
             let deleteButton = '';

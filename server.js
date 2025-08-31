@@ -238,7 +238,8 @@ class PokerGame {
   constructor(roomCode) {
     this.roomCode = roomCode;
     this.players = {};
-    this.admin = null; // Track room creator
+    this.admin = null; // Track current admin
+    this.originalAdmin = null; // Track original room creator
     this.currentPlayerIndex = 0;
     this.currentPlayer = null;
     this.gameStarted = false;
@@ -284,6 +285,9 @@ class PokerGame {
     // Set first player as admin
     if (isAdmin || !this.admin) {
       this.admin = playerId;
+      if (!this.originalAdmin) {
+        this.originalAdmin = playerId; // Track original admin permanently
+      }
     }
 
     this.updateActivity();
@@ -783,6 +787,7 @@ class PokerGame {
       roomCode: this.roomCode,
       players: this.players,
       admin: this.admin,
+      originalAdmin: this.originalAdmin,
       currentPlayer: this.currentPlayer,
       gameStarted: this.gameStarted,
       gameEnded: this.gameEnded,
@@ -815,6 +820,20 @@ class PokerGame {
     this.gameEnded = false;
     this.winner = null;
     this.dealerIndex = 0;
+  }
+
+  canReclaimAdmin(playerId) {
+    return this.originalAdmin === playerId;
+  }
+
+  reclaimAdmin(playerId) {
+    if (!this.canReclaimAdmin(playerId)) {
+      throw new Error('Only the original admin can reclaim admin privileges');
+    }
+    
+    this.admin = playerId;
+    this.updateActivity();
+    return true;
   }
 }
 
@@ -1083,6 +1102,27 @@ io.on('connection', (socket) => {
 
       console.log(`Player order set by admin`);
       saveGame();
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  socket.on('reclaimAdmin', (data) => {
+    if (!globalGame) return;
+
+    try {
+      const success = globalGame.reclaimAdmin(data.playerId);
+      
+      if (success) {
+        io.to(ROOM_CODE).emit('adminReclaimed', {
+          newAdminId: data.playerId,
+          newAdminName: globalGame.players[data.playerId].name,
+          gameState: globalGame.getGameState()
+        });
+
+        console.log(`Admin reclaimed by: ${globalGame.players[data.playerId].name}`);
+        saveGame();
+      }
     } catch (error) {
       socket.emit('error', { message: error.message });
     }
