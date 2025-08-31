@@ -361,6 +361,46 @@ class PokerGame {
     return this.pot;
   }
 
+  canDeclareWinner(adminId) {
+    return this.admin === adminId && this.gameStarted;
+  }
+
+  declareWinner(adminId, winnerId) {
+    if (!this.canDeclareWinner(adminId)) {
+      throw new Error('Only admin can declare winner during game');
+    }
+    
+    if (!this.players[winnerId]) {
+      throw new Error('Selected winner does not exist');
+    }
+    
+    if (this.players[winnerId].hasFolded) {
+      throw new Error('Cannot declare folded player as winner');
+    }
+    
+    // Award pot to winner
+    this.players[winnerId].chips += this.pot;
+    this.winner = winnerId;
+    
+    this.bettingHistory.push({
+      action: 'winner_declared',
+      playerId: winnerId,
+      playerName: this.players[winnerId].name,
+      amount: this.pot,
+      timestamp: new Date()
+    });
+    
+    const potWon = this.pot;
+    this.pot = 0;
+    this.updateActivity();
+    
+    return {
+      winnerId: winnerId,
+      winnerName: this.players[winnerId].name,
+      potWon: potWon
+    };
+  }
+
   updateActivity() {
     this.lastActivity = new Date();
   }
@@ -1001,6 +1041,26 @@ io.on('connection', (socket) => {
       });
 
       console.log(`Pot edited to $${newPot}`);
+      saveGame();
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  socket.on('declareWinner', (data) => {
+    if (!globalGame) return;
+
+    try {
+      const result = globalGame.declareWinner(data.adminId, data.winnerId);
+      
+      io.to(ROOM_CODE).emit('winnerDeclared', {
+        winnerId: result.winnerId,
+        winnerName: result.winnerName,
+        potWon: result.potWon,
+        gameState: globalGame.getGameState()
+      });
+
+      console.log(`Winner declared: ${result.winnerName} wins $${result.potWon}`);
       saveGame();
     } catch (error) {
       socket.emit('error', { message: error.message });

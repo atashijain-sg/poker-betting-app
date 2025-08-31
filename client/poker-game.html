@@ -548,6 +548,15 @@
                 <button class="button" onclick="setStartingPlayer()">Set Starting Player</button>
             </div>
 
+            <div class="betting-controls" id="winnerControls" style="display: none;">
+                <h3>🏆 Declare Winner (Admin Only)</h3>
+                <p style="font-size: 14px; margin-bottom: 10px;">Based on your physical cards, who won this hand?</p>
+                <select id="winnerSelect" class="bet-input" style="width: 200px; margin: 10px;">
+                    <option value="">Select winner...</option>
+                </select>
+                <button class="button" onclick="declareWinner()" style="background: #00cc00;">Declare Winner</button>
+            </div>
+
             <div class="betting-history">
                 <h3>Recent Actions</h3>
                 <div id="bettingHistoryList">
@@ -616,6 +625,7 @@
             
             updateGameDisplay();
             updateStartingPlayerControls();
+            updateWinnerControls();
             
             if (data.isRejoining) {
                 showSuccess('Rejoined the game');
@@ -639,6 +649,14 @@
             gameState = data.gameState;
             updateGameDisplay();
             showSuccess('Pot updated to $' + data.newPot);
+        });
+
+        socket.on('winnerDeclared', (data) => {
+            gameState = data.gameState;
+            updateGameDisplay();
+            showSuccess(`🏆 ${data.winnerName} wins the hand! Pot: $${data.potWon}`);
+            playChime(); // Play victory chime
+            updateWinnerControls(); // Hide winner controls
         });
 
         socket.on('gameStarted', (data) => {
@@ -734,6 +752,23 @@
                 adminId: playerId,
                 startingPlayerId: startingPlayerId
             });
+        }
+
+        function declareWinner() {
+            const winnerId = document.getElementById('winnerSelect').value;
+            if (!winnerId) {
+                showError('Please select a winner');
+                return;
+            }
+            
+            const winnerName = gameState.players[winnerId].name;
+            if (confirm(`🏆 Declare ${winnerName} as the winner?\n\nThey will receive the pot of $${gameState.pot}.`)) {
+                socket.emit('declareWinner', {
+                    roomCode: currentRoomCode,
+                    adminId: playerId,
+                    winnerId: winnerId
+                });
+            }
         }
 
         function newHand() {
@@ -904,6 +939,7 @@
             // Update players list (only if players have changed)
             updatePlayersList();
             updateBettingControls();
+            updateWinnerControls();
         }
 
         function updateStartingPlayerControls() {
@@ -921,6 +957,29 @@
                     option.value = player.id;
                     option.textContent = player.name;
                     select.appendChild(option);
+                });
+            } else {
+                controls.style.display = 'none';
+            }
+        }
+
+        function updateWinnerControls() {
+            const controls = document.getElementById('winnerControls');
+            const select = document.getElementById('winnerSelect');
+            
+            // Show controls only for admin during game with active pot
+            if (gameState.admin === playerId && gameState.gameStarted && gameState.pot > 0) {
+                controls.style.display = 'block';
+                
+                // Update winner options (only non-folded players)
+                select.innerHTML = '<option value="">Select winner...</option>';
+                Object.values(gameState.players || {}).forEach(player => {
+                    if (!player.hasFolded) {
+                        const option = document.createElement('option');
+                        option.value = player.id;
+                        option.textContent = `${player.name} ($${player.chips} chips)`;
+                        select.appendChild(option);
+                    }
                 });
             } else {
                 controls.style.display = 'none';
