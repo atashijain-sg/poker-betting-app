@@ -358,6 +358,8 @@
             <p>Play no-limit poker with friends - betting chips only!</p>
             <div class="session-info">
                 <span class="label">Session ID:</span> <span id="sessionId"></span>
+                <span style="margin: 0 20px;">|</span>
+                <span class="label">Room Code:</span> <span id="headerRoomCode">Not in room</span>
             </div>
         </div>
 
@@ -468,8 +470,14 @@
         playerId = localStorage.getItem('pokerId') || 'player_' + Math.random().toString(36).substr(2, 9);
         localStorage.setItem('pokerId', playerId);
         
-        // Display session ID
+        // Display session ID and room code
         document.getElementById('sessionId').textContent = playerId;
+        
+        // Display room code if we have one saved
+        const savedRoom = localStorage.getItem('pokerRoom');
+        if (savedRoom) {
+            document.getElementById('headerRoomCode').textContent = savedRoom;
+        }
 
         // Auto-rejoin on page load if session exists
         window.addEventListener('load', () => {
@@ -499,7 +507,9 @@
             localStorage.setItem('pokerRoom', currentRoomCode);
             localStorage.setItem('pokerName', playerName);
             
+            // Update both room code displays
             document.getElementById('roomCodeValue').textContent = currentRoomCode;
+            document.getElementById('headerRoomCode').textContent = currentRoomCode;
             document.getElementById('currentRoomCode').style.display = 'block';
             document.getElementById('gameSetup').style.display = 'none';
             document.getElementById('gameArea').style.display = 'block';
@@ -630,6 +640,7 @@
             // Clear session when resetting
             localStorage.removeItem('pokerRoom');
             localStorage.removeItem('pokerName');
+            document.getElementById('headerRoomCode').textContent = 'Not in room';
             socket.emit('resetGame', { roomCode: currentRoomCode });
         }
 
@@ -683,6 +694,7 @@
                 playerId = 'player_' + Math.random().toString(36).substr(2, 9);
                 localStorage.setItem('pokerId', playerId);
                 document.getElementById('sessionId').textContent = playerId;
+                document.getElementById('headerRoomCode').textContent = 'Not in room';
                 
                 // Reload page to start fresh
                 window.location.reload();
