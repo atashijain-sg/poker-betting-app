@@ -747,7 +747,6 @@ class PokerGame {
 
 // Game rooms storage with persistence
 const fs = require('fs');
-const path = require('path');
 const gameRooms = new Map();
 const GAMES_FILE = path.join(__dirname, 'games.json');
 
