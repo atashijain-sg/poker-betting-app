@@ -338,6 +338,18 @@
             display: none;
         }
 
+        .game-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        .game-controls .button {
+            margin: 0; /* Remove default button margin */
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 10px;
@@ -353,6 +365,10 @@
 
             .betting-buttons .button {
                 min-width: auto;
+            }
+
+            .game-controls {
+                grid-template-columns: 1fr 1fr; /* 2 columns on mobile */
             }
         }
     </style>
@@ -440,9 +456,17 @@
 
             <div class="game-controls">
                 <button class="button" onclick="startGame()" id="startGameBtn">Start Game</button>
-                <button class="button" onclick="newHand()" id="newHandBtn" style="display: none;">New Hand</button>
+                <button class="button" onclick="newHand()" id="newHandBtn" style="visibility: hidden;">New Hand</button>
                 <button class="button" onclick="resetGame()" id="resetGameBtn">Reset Game</button>
                 <button class="button" onclick="leaveGame()" style="background: #ff4444;">Leave Game</button>
+            </div>
+
+            <div class="betting-controls" id="startingPlayerControls" style="display: none;">
+                <h3>Choose Starting Player (Admin Only)</h3>
+                <select id="startingPlayerSelect" class="bet-input" style="width: 200px; margin: 10px;">
+                    <option value="">Select starting player...</option>
+                </select>
+                <button class="button" onclick="setStartingPlayer()">Set Starting Player</button>
             </div>
 
             <div class="betting-history">
@@ -527,6 +551,7 @@
             document.getElementById('gameArea').style.display = 'block';
             
             updateGameDisplay();
+            updateStartingPlayerControls();
             
             if (data.isRejoining) {
                 showSuccess('Rejoined room: ' + currentRoomCode);
@@ -556,7 +581,7 @@
             gameState = data.gameState;
             updateGameDisplay();
             showSuccess('Game started! Blinds have been posted.');
-            document.getElementById('startGameBtn').style.display = 'none';
+            document.getElementById('startGameBtn').style.visibility = 'hidden';
         });
 
         socket.on('actionPerformed', (data) => {
@@ -572,22 +597,29 @@
 
         socket.on('handWon', (data) => {
             showSuccess(`${data.winner} wins the hand! Pot: $${data.pot}`);
-            document.getElementById('newHandBtn').style.display = 'block';
+            document.getElementById('newHandBtn').style.visibility = 'visible';
         });
 
         socket.on('newHandStarted', (data) => {
             gameState = data.gameState;
             updateGameDisplay();
             showSuccess('New hand started!');
-            document.getElementById('newHandBtn').style.display = 'none';
+            document.getElementById('newHandBtn').style.visibility = 'hidden';
         });
 
         socket.on('gameReset', (data) => {
             gameState = data.gameState;
             updateGameDisplay();
             showSuccess('Game reset!');
-            document.getElementById('startGameBtn').style.display = 'block';
-            document.getElementById('newHandBtn').style.display = 'none';
+            document.getElementById('startGameBtn').style.visibility = 'visible';
+            document.getElementById('newHandBtn').style.visibility = 'hidden';
+            updateStartingPlayerControls();
+        });
+
+        socket.on('startingPlayerSet', (data) => {
+            gameState = data.gameState;
+            updateGameDisplay();
+            showSuccess(`Starting player set to ${data.startingPlayerName}`);
         });
 
 
@@ -634,7 +666,25 @@
 
         function startGame() {
             if (!currentRoomCode) return;
-            socket.emit('startGame', { roomCode: currentRoomCode });
+            const startingPlayerId = document.getElementById('startingPlayerSelect').value;
+            socket.emit('startGame', { 
+                roomCode: currentRoomCode,
+                startingPlayerId: startingPlayerId || null
+            });
+        }
+
+        function setStartingPlayer() {
+            const startingPlayerId = document.getElementById('startingPlayerSelect').value;
+            if (!startingPlayerId) {
+                showError('Please select a starting player');
+                return;
+            }
+            
+            socket.emit('setStartingPlayer', {
+                roomCode: currentRoomCode,
+                adminId: playerId,
+                startingPlayerId: startingPlayerId
+            });
         }
 
         function newHand() {
@@ -782,6 +832,27 @@
             // Update players list (only if players have changed)
             updatePlayersList();
             updateBettingControls();
+        }
+
+        function updateStartingPlayerControls() {
+            const controls = document.getElementById('startingPlayerControls');
+            const select = document.getElementById('startingPlayerSelect');
+            
+            // Show controls only for admin before game starts
+            if (gameState.admin === playerId && !gameState.gameStarted) {
+                controls.style.display = 'block';
+                
+                // Update player options
+                select.innerHTML = '<option value="">Select starting player...</option>';
+                Object.values(gameState.players || {}).forEach(player => {
+                    const option = document.createElement('option');
+                    option.value = player.id;
+                    option.textContent = player.name;
+                    select.appendChild(option);
+                });
+            } else {
+                controls.style.display = 'none';
+            }
         }
 
         function updatePlayersList() {

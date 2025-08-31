@@ -369,15 +369,43 @@ class PokerGame {
     return (now - this.lastActivity) > this.sessionTimeout;
   }
 
-  startGame() {
+  startGame(startingPlayerId = null) {
     if (Object.keys(this.players).length < 2) {
       throw new Error('Need at least 2 players to start');
     }
     
     this.gameStarted = true;
     const playerIds = Object.keys(this.players);
-    this.currentPlayer = playerIds[0];
+    
+    // Set starting player
+    if (startingPlayerId && this.players[startingPlayerId]) {
+      this.dealerIndex = playerIds.indexOf(startingPlayerId);
+      this.currentPlayer = startingPlayerId;
+    } else {
+      this.dealerIndex = 0;
+      this.currentPlayer = playerIds[0];
+    }
+    
     this.startNewHand();
+  }
+
+  canSetStartingPlayer(adminId) {
+    return this.admin === adminId && !this.gameStarted;
+  }
+
+  setStartingPlayer(adminId, startingPlayerId) {
+    if (!this.canSetStartingPlayer(adminId)) {
+      throw new Error('Only admin can set starting player before game starts');
+    }
+    
+    const playerIds = Object.keys(this.players);
+    if (!this.players[startingPlayerId]) {
+      throw new Error('Selected player does not exist');
+    }
+    
+    this.dealerIndex = playerIds.indexOf(startingPlayerId);
+    this.updateActivity();
+    return startingPlayerId;
   }
 
   startNewHand() {
@@ -717,14 +745,59 @@ class PokerGame {
   }
 }
 
-// Game rooms storage
+// Game rooms storage with persistence
+const fs = require('fs');
+const path = require('path');
 const gameRooms = new Map();
+const GAMES_FILE = path.join(__dirname, 'games.json');
 
 function generateRoomCode() {
   return Math.random().toString(36).substr(2, 6).toUpperCase();
 }
 
-// Clean up expired rooms every 30 minutes
+// Load existing games on startup
+function loadGames() {
+  try {
+    if (fs.existsSync(GAMES_FILE)) {
+      const data = fs.readFileSync(GAMES_FILE, 'utf8');
+      const savedGames = JSON.parse(data);
+      
+      Object.entries(savedGames).forEach(([roomCode, gameData]) => {
+        const game = new PokerGame(roomCode);
+        Object.assign(game, gameData);
+        // Convert date strings back to Date objects
+        game.createdAt = new Date(game.createdAt);
+        game.lastActivity = new Date(game.lastActivity);
+        
+        // Only load non-expired games
+        if (!game.isExpired()) {
+          gameRooms.set(roomCode, game);
+          console.log(`Restored room: ${roomCode}`);
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error loading games:', error);
+  }
+}
+
+// Save games to file
+function saveGames() {
+  try {
+    const gamesToSave = {};
+    gameRooms.forEach((game, roomCode) => {
+      gamesToSave[roomCode] = game;
+    });
+    fs.writeFileSync(GAMES_FILE, JSON.stringify(gamesToSave, null, 2));
+  } catch (error) {
+    console.error('Error saving games:', error);
+  }
+}
+
+// Load games on startup
+loadGames();
+
+// Save games every 2 minutes and clean up expired rooms
 setInterval(() => {
   const now = new Date();
   gameRooms.forEach((game, roomCode) => {
@@ -733,7 +806,14 @@ setInterval(() => {
       gameRooms.delete(roomCode);
     }
   });
-}, 30 * 60 * 1000); // 30 minutes
+  
+  // Save current games
+  saveGames();
+}, 2 * 60 * 1000); // 2 minutes
+
+// Save games on process exit
+process.on('SIGTERM', saveGames);
+process.on('SIGINT', saveGames);
 
 // Socket.io event handlers
 io.on('connection', (socket) => {
@@ -808,11 +888,32 @@ io.on('connection', (socket) => {
     if (!game || game.gameStarted) return;
 
     try {
-      game.startGame();
+      game.startGame(data.startingPlayerId);
       io.to(data.roomCode).emit('gameStarted', {
+        gameState: game.getGameState(),
+        startingPlayer: data.startingPlayerId
+      });
+      console.log(`Game started in room ${data.roomCode} with starting player: ${data.startingPlayerId || 'default'}`);
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  socket.on('setStartingPlayer', (data) => {
+    const game = gameRooms.get(data.roomCode);
+    if (!game) return;
+
+    try {
+      const startingPlayerId = game.setStartingPlayer(data.adminId, data.startingPlayerId);
+      const startingPlayer = game.players[startingPlayerId];
+      
+      io.to(data.roomCode).emit('startingPlayerSet', {
+        startingPlayerId: startingPlayerId,
+        startingPlayerName: startingPlayer.name,
         gameState: game.getGameState()
       });
-      console.log(`Game started in room ${data.roomCode}`);
+
+      console.log(`Starting player set to ${startingPlayer.name} in room ${data.roomCode}`);
     } catch (error) {
       socket.emit('error', { message: error.message });
     }
