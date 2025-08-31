@@ -416,7 +416,7 @@ class PokerGame {
     }
     
     this.gameStarted = true;
-    const playerIds = Object.keys(this.players);
+    const playerIds = this.getPlayerOrder();
     
     // Set starting player
     if (startingPlayerId && this.players[startingPlayerId]) {
@@ -499,7 +499,7 @@ class PokerGame {
     this.postBlinds();
     
     // Set first player to act (after big blind)
-    const playerIds = Object.keys(this.players);
+    const playerIds = this.getPlayerOrder();
     const bigBlindIndex = (this.dealerIndex + 2) % playerIds.length;
     this.currentPlayerIndex = (bigBlindIndex + 1) % playerIds.length;
     this.currentPlayer = playerIds[this.currentPlayerIndex];
@@ -700,7 +700,7 @@ class PokerGame {
   }
 
   nextPlayer() {
-    const playerIds = Object.keys(this.players);
+    const playerIds = this.getPlayerOrder();
     let attempts = 0;
     
     do {
@@ -738,8 +738,10 @@ class PokerGame {
     this.currentBet = 0;
     this.bettingRound++;
     
+    console.log(`Betting round completed, advancing to round ${this.bettingRound}`);
+    
     // Set next player to dealer + 1 (or first active player)
-    const playerIds = Object.keys(this.players);
+    const playerIds = this.getPlayerOrder();
     this.currentPlayerIndex = this.dealerIndex;
     this.nextPlayer();
     
@@ -752,8 +754,9 @@ class PokerGame {
       // Only one player left, they win
       this.endHand(activePlayers[0].id);
     } else if (this.bettingRound >= 4) {
-      // All betting rounds complete, need showdown
-      this.endHand(); // For now, just award to first active player
+      // All betting rounds complete, need manual winner declaration
+      console.log('All betting rounds complete - awaiting winner declaration');
+      // Don't auto-end, let admin declare winner
     }
   }
 
@@ -772,7 +775,7 @@ class PokerGame {
     }
     
     this.pot = 0;
-    this.dealerIndex = (this.dealerIndex + 1) % Object.keys(this.players).length;
+    this.dealerIndex = (this.dealerIndex + 1) % this.getPlayerOrder().length;
   }
 
   getGameState() {
@@ -808,7 +811,7 @@ class PokerGame {
     this.bettingRound = 0;
     this.bettingHistory = [];
     this.currentPlayerIndex = 0;
-    this.currentPlayer = Object.keys(this.players)[0];
+    this.currentPlayer = this.getPlayerOrder()[0];
     this.gameEnded = false;
     this.winner = null;
     this.dealerIndex = 0;
@@ -1061,6 +1064,24 @@ io.on('connection', (socket) => {
       });
 
       console.log(`Winner declared: ${result.winnerName} wins $${result.potWon}`);
+      saveGame();
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  socket.on('setPlayerOrder', (data) => {
+    if (!globalGame) return;
+
+    try {
+      const newOrder = globalGame.setPlayerOrder(data.adminId, data.playerOrder);
+      
+      io.to(ROOM_CODE).emit('playerOrderSet', {
+        playerOrder: newOrder,
+        gameState: globalGame.getGameState()
+      });
+
+      console.log(`Player order set by admin`);
       saveGame();
     } catch (error) {
       socket.emit('error', { message: error.message });

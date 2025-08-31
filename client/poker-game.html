@@ -163,6 +163,34 @@
             margin: 2px 0;
         }
 
+        .player-order-item {
+            background: rgba(255,255,255,0.1);
+            padding: 8px;
+            margin: 4px 0;
+            border-radius: 4px;
+            cursor: move;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .player-order-item:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .player-order-item.dragging {
+            opacity: 0.5;
+        }
+
+        .order-number {
+            background: #ffcc00;
+            color: #000;
+            padding: 2px 6px;
+            border-radius: 50%;
+            font-weight: bold;
+            font-size: 12px;
+        }
+
         .game-area {
             display: none;
             background: rgba(255,255,255,0.1);
@@ -548,6 +576,15 @@
                 <button class="button" onclick="setStartingPlayer()">Set Starting Player</button>
             </div>
 
+            <div class="betting-controls" id="playerOrderControls" style="display: none;">
+                <h3>🎲 Set Player Order (Admin Only)</h3>
+                <p style="font-size: 14px; margin-bottom: 10px;">Drag players to reorder them for betting:</p>
+                <div id="playerOrderList" style="margin: 10px 0;">
+                    <!-- Draggable player list -->
+                </div>
+                <button class="button" onclick="savePlayerOrder()">Save Player Order</button>
+            </div>
+
             <div class="betting-controls" id="winnerControls" style="display: none;">
                 <h3>🏆 Declare Winner (Admin Only)</h3>
                 <p style="font-size: 14px; margin-bottom: 10px;">Based on your physical cards, who won this hand?</p>
@@ -625,6 +662,7 @@
             
             updateGameDisplay();
             updateStartingPlayerControls();
+            updatePlayerOrderControls();
             updateWinnerControls();
             
             if (data.isRejoining) {
@@ -707,6 +745,13 @@
             gameState = data.gameState;
             updateGameDisplay();
             showSuccess(`Starting player set to ${data.startingPlayerName}`);
+        });
+
+        socket.on('playerOrderSet', (data) => {
+            gameState = data.gameState;
+            updateGameDisplay();
+            updatePlayerOrderControls();
+            showSuccess('Player order updated!');
         });
 
 
@@ -844,7 +889,7 @@
         }
 
         function playChime() {
-            // Create audio context for chime
+            // Create louder audio context for chime
             try {
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 const oscillator = audioContext.createOscillator();
@@ -853,17 +898,77 @@
                 oscillator.connect(gainNode);
                 gainNode.connect(audioContext.destination);
                 
-                oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-                oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.1);
+                // Louder, more prominent chime
+                oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
+                oscillator.frequency.setValueAtTime(800, audioContext.currentTime + 0.1);
+                oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.2);
                 
-                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                gainNode.gain.setValueAtTime(0.7, audioContext.currentTime); // Louder volume
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
                 
                 oscillator.start(audioContext.currentTime);
-                oscillator.stop(audioContext.currentTime + 0.3);
+                oscillator.stop(audioContext.currentTime + 0.5);
             } catch (error) {
                 console.log('Audio not supported');
             }
+        }
+
+        // Drag and drop functionality for player ordering
+        let draggedElement = null;
+
+        function handleDragStart(e) {
+            draggedElement = e.target;
+            e.target.classList.add('dragging');
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            if (draggedElement && e.target.closest('.player-order-item')) {
+                const dropTarget = e.target.closest('.player-order-item');
+                const orderList = document.getElementById('playerOrderList');
+                
+                if (draggedElement !== dropTarget) {
+                    const draggedIndex = Array.from(orderList.children).indexOf(draggedElement);
+                    const dropIndex = Array.from(orderList.children).indexOf(dropTarget);
+                    
+                    if (draggedIndex < dropIndex) {
+                        orderList.insertBefore(draggedElement, dropTarget.nextSibling);
+                    } else {
+                        orderList.insertBefore(draggedElement, dropTarget);
+                    }
+                    
+                    // Update order numbers
+                    updateOrderNumbers();
+                }
+            }
+        }
+
+        function handleDragEnd(e) {
+            e.target.classList.remove('dragging');
+            draggedElement = null;
+        }
+
+        function updateOrderNumbers() {
+            const orderList = document.getElementById('playerOrderList');
+            Array.from(orderList.children).forEach((item, index) => {
+                const orderNumber = item.querySelector('.order-number');
+                orderNumber.textContent = index + 1;
+            });
+        }
+
+        function savePlayerOrder() {
+            const orderList = document.getElementById('playerOrderList');
+            const newOrder = Array.from(orderList.children).map(item => item.dataset.playerId);
+            
+            socket.emit('setPlayerOrder', {
+                roomCode: currentRoomCode,
+                adminId: playerId,
+                playerOrder: newOrder
+            });
         }
 
         function performAction(action, amount = 0) {
@@ -939,6 +1044,7 @@
             // Update players list (only if players have changed)
             updatePlayersList();
             updateBettingControls();
+            updatePlayerOrderControls();
             updateWinnerControls();
         }
 
@@ -957,6 +1063,40 @@
                     option.value = player.id;
                     option.textContent = player.name;
                     select.appendChild(option);
+                });
+            } else {
+                controls.style.display = 'none';
+            }
+        }
+
+        function updatePlayerOrderControls() {
+            const controls = document.getElementById('playerOrderControls');
+            const orderList = document.getElementById('playerOrderList');
+            
+            // Show controls only for admin before game starts
+            if (gameState.admin === playerId && !gameState.gameStarted && Object.keys(gameState.players || {}).length > 1) {
+                controls.style.display = 'block';
+                
+                // Create draggable player list
+                orderList.innerHTML = '';
+                Object.values(gameState.players || {}).forEach((player, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'player-order-item';
+                    item.draggable = true;
+                    item.dataset.playerId = player.id;
+                    item.innerHTML = `
+                        <span class="order-number">${index + 1}</span>
+                        <span>${player.name}</span>
+                        <span>$${player.chips}</span>
+                    `;
+                    
+                    // Add drag event listeners
+                    item.addEventListener('dragstart', handleDragStart);
+                    item.addEventListener('dragover', handleDragOver);
+                    item.addEventListener('drop', handleDrop);
+                    item.addEventListener('dragend', handleDragEnd);
+                    
+                    orderList.appendChild(item);
                 });
             } else {
                 controls.style.display = 'none';
