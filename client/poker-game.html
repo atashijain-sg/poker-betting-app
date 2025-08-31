@@ -466,6 +466,8 @@
         let validActions = [];
         let currentBetAction = '';
         let lastUpdate = 0;
+        let lastValidActions = [];
+        let requestingActions = false;
 
         // Generate or restore player ID from localStorage
         playerId = localStorage.getItem('pokerId') || 'player_' + Math.random().toString(36).substr(2, 9);
@@ -858,18 +860,29 @@
             
             if (shouldShowControls && controls.style.display === 'none') {
                 controls.style.display = 'block';
-                // Get valid actions only when controls become visible
-                socket.emit('getValidActions', { roomCode: currentRoomCode, playerId: playerId });
+                // Clear any existing buttons first
+                buttonsContainer.innerHTML = '';
+                lastValidActions = [];
+                validActions = [];
+                // Get valid actions only when controls become visible and not already requesting
+                if (!requestingActions) {
+                    requestingActions = true;
+                    socket.emit('getValidActions', { roomCode: currentRoomCode, playerId: playerId });
+                }
             } else if (!shouldShowControls && controls.style.display === 'block') {
                 controls.style.display = 'none';
                 buttonsContainer.innerHTML = ''; // Clear buttons when hiding
+                lastValidActions = [];
+                validActions = [];
+                requestingActions = false;
             }
         }
 
         // Update betting buttons when valid actions are received
         socket.on('validActions', (data) => {
             if (data.playerId === playerId) {
-                validActions = data.actions;
+                requestingActions = false;
+                validActions = data.actions || [];
                 updateBettingButtons();
             }
         });
@@ -880,13 +893,29 @@
             // Only update if controls are visible
             if (document.getElementById('bettingControls').style.display === 'none') return;
             
-            // Clear existing buttons
-            buttonsContainer.innerHTML = '';
+            // Check if actions have actually changed to prevent unnecessary updates
+            if (JSON.stringify(validActions) === JSON.stringify(lastValidActions)) return;
+            lastValidActions = [...validActions];
             
-            validActions.forEach(action => {
+            // Clear existing buttons completely
+            while (buttonsContainer.firstChild) {
+                buttonsContainer.removeChild(buttonsContainer.firstChild);
+            }
+            
+            // Create unique buttons (remove duplicates)
+            const uniqueActions = [...new Set(validActions)];
+            
+            // Prevent creating buttons if we already have them
+            if (buttonsContainer.children.length > 0) return;
+            
+            uniqueActions.forEach(action => {
+                // Check if button already exists
+                if (document.getElementById(`btn-${action}`)) return;
+                
                 const button = document.createElement('button');
                 button.className = 'button';
                 button.textContent = action.charAt(0).toUpperCase() + action.slice(1);
+                button.id = `btn-${action}`; // Add unique ID
                 
                 if (action === 'bet' || action === 'raise') {
                     button.onclick = () => showBetInput(action);
