@@ -372,6 +372,7 @@
                 <div class="info-card">
                     <h3>💰 Pot</h3>
                     <div class="value" id="potValue">$0</div>
+                    <button class="button" id="editPotBtn" onclick="showEditPot()" style="display: none; font-size: 12px; padding: 5px 10px; margin-top: 5px;">Edit</button>
                 </div>
                 <div class="info-card">
                     <h3>💵 Current Bet</h3>
@@ -400,6 +401,13 @@
                     <label for="betAmount">Amount:</label>
                     <input type="number" id="betAmount" class="bet-input" min="1" placeholder="Enter amount">
                     <button class="button" onclick="confirmBet()">Confirm</button>
+                </div>
+                
+                <div class="bet-input-group" id="editPotGroup" style="display: none;">
+                    <label for="newPotValue">New Pot Value:</label>
+                    <input type="number" id="newPotValue" class="bet-input" min="0" placeholder="Enter pot amount">
+                    <button class="button" onclick="confirmPotEdit()">Update Pot</button>
+                    <button class="button" onclick="cancelPotEdit()" style="background: #666;">Cancel</button>
                 </div>
             </div>
 
@@ -462,6 +470,12 @@
             gameState = data.gameState;
             updateGameDisplay();
             showSuccess(data.deletedPlayerName + ' was removed from the game');
+        });
+
+        socket.on('potEdited', (data) => {
+            gameState = data.gameState;
+            updateGameDisplay();
+            showSuccess('Pot updated to $' + data.newPot);
         });
 
         socket.on('gameStarted', (data) => {
@@ -574,6 +588,33 @@
             }
         }
 
+        function showEditPot() {
+            document.getElementById('editPotGroup').style.display = 'flex';
+            document.getElementById('newPotValue').value = gameState.pot || 0;
+            document.getElementById('newPotValue').focus();
+        }
+
+        function cancelPotEdit() {
+            document.getElementById('editPotGroup').style.display = 'none';
+            document.getElementById('newPotValue').value = '';
+        }
+
+        function confirmPotEdit() {
+            const newPotValue = parseInt(document.getElementById('newPotValue').value);
+            if (isNaN(newPotValue) || newPotValue < 0) {
+                showError('Please enter a valid pot amount (0 or greater)');
+                return;
+            }
+            
+            socket.emit('editPot', {
+                roomCode: currentRoomCode,
+                adminId: playerId,
+                newPotValue: newPotValue
+            });
+            
+            cancelPotEdit();
+        }
+
         function performAction(action, amount = 0) {
             if (!currentRoomCode) return;
             socket.emit('performAction', { 
@@ -606,6 +647,14 @@
             // Update game info
             document.getElementById('potValue').textContent = '$' + (gameState.pot || 0);
             document.getElementById('currentBetValue').textContent = '$' + (gameState.currentBet || 0);
+            
+            // Show pot edit button for admin
+            const editPotBtn = document.getElementById('editPotBtn');
+            if (gameState.admin === playerId) {
+                editPotBtn.style.display = 'block';
+            } else {
+                editPotBtn.style.display = 'none';
+            }
             
             const rounds = ['Pre-flop', 'Flop', 'Turn', 'River'];
             document.getElementById('bettingRoundValue').textContent = rounds[gameState.bettingRound] || 'Pre-flop';
@@ -779,6 +828,12 @@
                 } else {
                     createRoom();
                 }
+            }
+        });
+
+        document.getElementById('newPotValue').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                confirmPotEdit();
             }
         });
     </script>

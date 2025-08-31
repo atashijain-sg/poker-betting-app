@@ -252,6 +252,9 @@ class PokerGame {
     this.smallBlind = 10;
     this.bigBlind = 20;
     this.dealerIndex = 0;
+    this.createdAt = new Date();
+    this.lastActivity = new Date();
+    this.sessionTimeout = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
   }
 
   addPlayer(playerId, playerName, isAdmin = false) {
@@ -309,7 +312,35 @@ class PokerGame {
     }
     
     this.removePlayer(targetPlayerId);
+    this.updateActivity();
     return true;
+  }
+
+  canEditPot(playerId) {
+    return this.admin === playerId;
+  }
+
+  editPot(adminId, newPotValue) {
+    if (!this.canEditPot(adminId)) {
+      throw new Error('Only admin can edit pot value');
+    }
+    
+    if (newPotValue < 0) {
+      throw new Error('Pot value cannot be negative');
+    }
+    
+    this.pot = newPotValue;
+    this.updateActivity();
+    return this.pot;
+  }
+
+  updateActivity() {
+    this.lastActivity = new Date();
+  }
+
+  isExpired() {
+    const now = new Date();
+    return (now - this.lastActivity) > this.sessionTimeout;
   }
 
   startGame() {
@@ -338,6 +369,7 @@ class PokerGame {
     this.currentBet = 0;
     this.bettingRound = 0;
     this.bettingHistory = [];
+    this.winner = null;
 
     // Post blinds
     this.postBlinds();
@@ -347,6 +379,9 @@ class PokerGame {
     const bigBlindIndex = (this.dealerIndex + 2) % playerIds.length;
     this.currentPlayerIndex = (bigBlindIndex + 1) % playerIds.length;
     this.currentPlayer = playerIds[this.currentPlayerIndex];
+    
+    // Reset session timeout on new game
+    this.updateActivity();
   }
 
   postBlinds() {
@@ -663,6 +698,17 @@ function generateRoomCode() {
   return Math.random().toString(36).substr(2, 6).toUpperCase();
 }
 
+// Clean up expired rooms every 30 minutes
+setInterval(() => {
+  const now = new Date();
+  gameRooms.forEach((game, roomCode) => {
+    if (game.isExpired()) {
+      console.log(`Cleaning up expired room: ${roomCode}`);
+      gameRooms.delete(roomCode);
+    }
+  });
+}, 30 * 60 * 1000); // 30 minutes
+
 // Socket.io event handlers
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
@@ -793,6 +839,24 @@ io.on('connection', (socket) => {
 
         console.log(`Player ${deletedPlayerName} deleted from room ${data.roomCode}`);
       }
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  socket.on('editPot', (data) => {
+    const game = gameRooms.get(data.roomCode);
+    if (!game) return;
+
+    try {
+      const newPot = game.editPot(data.adminId, data.newPotValue);
+      
+      io.to(data.roomCode).emit('potEdited', {
+        newPot: newPot,
+        gameState: game.getGameState()
+      });
+
+      console.log(`Pot edited to $${newPot} in room ${data.roomCode}`);
     } catch (error) {
       socket.emit('error', { message: error.message });
     }
