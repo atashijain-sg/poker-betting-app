@@ -506,6 +506,7 @@
                         <li><strong>Flop:</strong> After 3 cards dealt</li>
                         <li><strong>Turn:</strong> After 4th card</li>
                         <li><strong>River:</strong> After 5th card</li>
+                        <li><strong>Auto-next hand:</strong> After winner declared</li>
                     </ul>
                 </div>
                 <div class="rule-section">
@@ -736,15 +737,8 @@
             gameState = data.gameState;
             updateGameDisplay();
             
-            // Show winner and blind shift info
-            const playerOrder = Object.keys(gameState.players);
-            const newSmallBlindIndex = (data.newDealerIndex + 1) % playerOrder.length;
-            const newBigBlindIndex = (data.newDealerIndex + 2) % playerOrder.length;
-            const smallBlindPlayer = gameState.players[playerOrder[newSmallBlindIndex]];
-            const bigBlindPlayer = gameState.players[playerOrder[newBigBlindIndex]];
-            
-            showSuccess(`🏆 ${data.winnerName} wins $${data.potWon}! 
-                        Next hand: ${smallBlindPlayer.name} (SB), ${bigBlindPlayer.name} (BB)`);
+            // Show winner info
+            showSuccess(`🏆 ${data.winnerName} wins $${data.potWon}! Starting new hand...`);
             playChime(); // Play victory chime
             updateWinnerControls(); // Hide winner controls
         });
@@ -774,13 +768,18 @@
 
         socket.on('handWon', (data) => {
             showSuccess(`${data.winner} wins the hand! Pot: $${data.pot}`);
-            document.getElementById('newHandBtn').style.visibility = 'visible';
+            // No need to show new hand button since hands auto-start after winner declaration
         });
 
         socket.on('newHandStarted', (data) => {
             gameState = data.gameState;
             updateGameDisplay();
-            showSuccess('New hand started!');
+            
+            if (data.autoStarted) {
+                showSuccess('🎴 New hand started automatically! Blinds rotated.');
+            } else {
+                showSuccess('New hand started!');
+            }
             document.getElementById('newHandBtn').style.visibility = 'hidden';
         });
 

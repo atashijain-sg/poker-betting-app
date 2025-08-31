@@ -384,7 +384,6 @@ class PokerGame {
     
     // Award pot to winner
     this.players[winnerId].chips += this.pot;
-    this.winner = winnerId;
     
     this.bettingHistory.push({
       action: 'winner_declared',
@@ -395,18 +394,26 @@ class PokerGame {
     });
     
     const potWon = this.pot;
-    this.pot = 0;
+    const winnerName = this.players[winnerId].name;
     
     // Advance dealer position to shift blinds for next hand
     this.dealerIndex = (this.dealerIndex + 1) % this.getPlayerOrder().length;
+    
+    // Clear winner and pot
+    this.winner = null;
+    this.pot = 0;
+    
+    // Automatically start new hand
+    this.startNewHand();
     
     this.updateActivity();
     
     return {
       winnerId: winnerId,
-      winnerName: this.players[winnerId].name,
+      winnerName: winnerName,
       potWon: potWon,
-      newDealerIndex: this.dealerIndex
+      newDealerIndex: this.dealerIndex,
+      newHandStarted: true
     };
   }
 
@@ -1080,6 +1087,7 @@ io.on('connection', (socket) => {
     try {
       const result = globalGame.declareWinner(data.adminId, data.winnerId);
       
+      // Emit winner declared event
       io.to(ROOM_CODE).emit('winnerDeclared', {
         winnerId: result.winnerId,
         winnerName: result.winnerName,
@@ -1088,7 +1096,17 @@ io.on('connection', (socket) => {
         gameState: globalGame.getGameState()
       });
 
-      console.log(`Winner declared: ${result.winnerName} wins $${result.potWon}, dealer position advanced`);
+      // Automatically emit new hand started since we started it in declareWinner
+      if (result.newHandStarted) {
+        setTimeout(() => {
+          io.to(ROOM_CODE).emit('newHandStarted', {
+            gameState: globalGame.getGameState(),
+            autoStarted: true
+          });
+        }, 2000); // 2 second delay to show winner message first
+      }
+
+      console.log(`Winner declared: ${result.winnerName} wins $${result.potWon}, new hand started automatically`);
       saveGame();
     } catch (error) {
       socket.emit('error', { message: error.message });
