@@ -424,8 +424,6 @@
             <p>Play no-limit poker with friends - betting chips only! (Up to 10 players)</p>
             <div class="session-info">
                 <span class="label">Session ID:</span> <span id="sessionId"></span>
-                <span style="margin: 0 20px;">|</span>
-                <span class="label">Room Code:</span> <span id="headerRoomCode">Not in room</span>
             </div>
         </div>
 
@@ -477,25 +475,18 @@
         <div class="success-message" id="successMessage"></div>
 
         <div class="game-setup" id="gameSetup">
-            <h2>Join or Create Game</h2>
+            <h2>Join the Game</h2>
             
             <div class="input-group">
                 <label for="playerName">Your Name:</label>
                 <input type="text" id="playerName" placeholder="Enter your name">
             </div>
 
-            <div class="input-group">
-                <label for="roomCode">Room Code (optional):</label>
-                <input type="text" id="roomCode" placeholder="Enter room code to join existing game">
-            </div>
-
-            <button class="button" onclick="createRoom()">Create New Game</button>
-            <button class="button" onclick="joinRoom()">Join Game</button>
-
-            <div class="room-code" id="currentRoomCode" style="display: none;">
-                Room Code: <span id="roomCodeValue"></span>
-                <br><small>Share this code with friends to let them join!</small>
-            </div>
+            <button class="button" onclick="joinGame()">Join Game</button>
+            
+            <p style="margin-top: 15px; font-size: 14px; opacity: 0.8;">
+                Everyone joins the same game - no room codes needed!
+            </p>
         </div>
 
         <div class="game-area" id="gameArea">
@@ -577,7 +568,7 @@
 
     <script>
         const socket = io();
-        let currentRoomCode = '';
+        const currentRoomCode = 'MAIN';
         let playerId = '';
         let playerName = '';
         let gameState = {};
@@ -591,50 +582,35 @@
         playerId = localStorage.getItem('pokerId') || 'player_' + Math.random().toString(36).substr(2, 9);
         localStorage.setItem('pokerId', playerId);
         
-        // Display session ID and room code
+        // Display session ID
         document.getElementById('sessionId').textContent = playerId;
-        
-        // Display room code if we have one saved
-        const savedRoom = localStorage.getItem('pokerRoom');
-        if (savedRoom) {
-            document.getElementById('headerRoomCode').textContent = savedRoom;
-        }
 
         // Auto-rejoin on page load if session exists
         window.addEventListener('load', () => {
             // Small delay to prevent immediate flickering
             setTimeout(() => {
                 const savedName = localStorage.getItem('pokerName');
-                const savedRoom = localStorage.getItem('pokerRoom');
                 
-                if (savedName && savedRoom) {
+                if (savedName) {
                     document.getElementById('playerName').value = savedName;
-                    document.getElementById('roomCode').value = savedRoom;
                     playerName = savedName;
                     
                     // Auto-rejoin
-                    socket.emit('joinRoom', { 
+                    socket.emit('joinGame', { 
                         playerId: playerId, 
-                        playerName: savedName, 
-                        roomCode: savedRoom 
+                        playerName: savedName
                     });
                 }
             }, 200);
         });
 
         // Socket event listeners
-        socket.on('roomJoined', (data) => {
-            currentRoomCode = data.roomCode;
+        socket.on('gameJoined', (data) => {
             gameState = data.gameState;
             
             // Save session to localStorage
-            localStorage.setItem('pokerRoom', currentRoomCode);
             localStorage.setItem('pokerName', playerName);
             
-            // Update both room code displays
-            document.getElementById('roomCodeValue').textContent = currentRoomCode;
-            document.getElementById('headerRoomCode').textContent = currentRoomCode;
-            document.getElementById('currentRoomCode').style.display = 'block';
             document.getElementById('gameSetup').style.display = 'none';
             document.getElementById('gameArea').style.display = 'block';
             
@@ -642,9 +618,9 @@
             updateStartingPlayerControls();
             
             if (data.isRejoining) {
-                showSuccess('Rejoined room: ' + currentRoomCode);
+                showSuccess('Rejoined the game');
             } else {
-                showSuccess('Successfully joined room: ' + currentRoomCode);
+                showSuccess('Successfully joined the game');
             }
         });
 
@@ -678,6 +654,11 @@
             
             // Add to betting history
             addBettingHistory(`${data.playerName} ${data.action}${data.amount > 0 ? ' $' + data.amount : ''}`);
+            
+            // Play chime for raises
+            if (data.action === 'raise' || data.action === 'bet') {
+                playChime();
+            }
             
             // Hide betting controls if it's no longer our turn
             updateBettingControls();
@@ -721,7 +702,7 @@
         });
 
         // Game functions
-        function createRoom() {
+        function joinGame() {
             const name = document.getElementById('playerName').value.trim();
             if (!name) {
                 showError('Please enter your name');
@@ -729,27 +710,7 @@
             }
             
             playerName = name;
-            // Clear any existing session before creating new room
-            localStorage.removeItem('pokerRoom');
-            socket.emit('createRoom', { playerId: playerId, playerName: name });
-        }
-
-        function joinRoom() {
-            const name = document.getElementById('playerName').value.trim();
-            const roomCode = document.getElementById('roomCode').value.trim().toUpperCase();
-            
-            if (!name) {
-                showError('Please enter your name');
-                return;
-            }
-            
-            if (!roomCode) {
-                showError('Please enter room code');
-                return;
-            }
-            
-            playerName = name;
-            socket.emit('joinRoom', { playerId: playerId, playerName: name, roomCode: roomCode });
+            socket.emit('joinGame', { playerId: playerId, playerName: name });
         }
 
         function startGame() {
@@ -782,11 +743,13 @@
 
         function resetGame() {
             if (!currentRoomCode) return;
-            // Clear session when resetting
-            localStorage.removeItem('pokerRoom');
-            localStorage.removeItem('pokerName');
-            document.getElementById('headerRoomCode').textContent = 'Not in room';
-            socket.emit('resetGame', { roomCode: currentRoomCode });
+            
+            if (confirm('⚠️ Reset the entire game? This will:\n\n• Reset all player chips to $1000\n• Clear betting history\n• Stop current game\n• All players stay in game\n\nAre you sure?')) {
+                // Clear session when resetting
+                localStorage.removeItem('pokerName');
+                socket.emit('resetGame', { roomCode: currentRoomCode });
+                showSuccess('Game reset! All players back to $1000 chips.');
+            }
         }
 
         function deletePlayer(targetPlayerId, targetPlayerName) {
@@ -832,7 +795,6 @@
         function leaveGame() {
             if (confirm('Are you sure you want to leave the game?')) {
                 // Clear session
-                localStorage.removeItem('pokerRoom');
                 localStorage.removeItem('pokerName');
                 localStorage.removeItem('pokerId');
                 
@@ -840,10 +802,32 @@
                 playerId = 'player_' + Math.random().toString(36).substr(2, 9);
                 localStorage.setItem('pokerId', playerId);
                 document.getElementById('sessionId').textContent = playerId;
-                document.getElementById('headerRoomCode').textContent = 'Not in room';
                 
                 // Reload page to start fresh
                 window.location.reload();
+            }
+        }
+
+        function playChime() {
+            // Create audio context for chime
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+                oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.1);
+                
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.3);
+            } catch (error) {
+                console.log('Audio not supported');
             }
         }
 
@@ -1176,11 +1160,7 @@
 
         document.getElementById('playerName').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
-                if (document.getElementById('roomCode').value.trim()) {
-                    joinRoom();
-                } else {
-                    createRoom();
-                }
+                joinGame();
             }
         });
 

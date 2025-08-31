@@ -252,6 +252,7 @@ class PokerGame {
     this.smallBlind = 10;
     this.bigBlind = 20;
     this.dealerIndex = 0;
+    this.playerOrder = []; // Custom player order set by admin
     this.createdAt = new Date();
     this.lastActivity = new Date();
     this.sessionTimeout = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
@@ -398,7 +399,7 @@ class PokerGame {
       throw new Error('Only admin can set starting player before game starts');
     }
     
-    const playerIds = Object.keys(this.players);
+    const playerIds = this.getPlayerOrder();
     if (!this.players[startingPlayerId]) {
       throw new Error('Selected player does not exist');
     }
@@ -406,6 +407,35 @@ class PokerGame {
     this.dealerIndex = playerIds.indexOf(startingPlayerId);
     this.updateActivity();
     return startingPlayerId;
+  }
+
+  canSetPlayerOrder(adminId) {
+    return this.admin === adminId && !this.gameStarted;
+  }
+
+  setPlayerOrder(adminId, newOrder) {
+    if (!this.canSetPlayerOrder(adminId)) {
+      throw new Error('Only admin can set player order before game starts');
+    }
+    
+    // Validate that all current players are in the new order
+    const currentPlayerIds = Object.keys(this.players);
+    if (newOrder.length !== currentPlayerIds.length || 
+        !newOrder.every(id => currentPlayerIds.includes(id))) {
+      throw new Error('Invalid player order');
+    }
+    
+    this.playerOrder = [...newOrder];
+    this.updateActivity();
+    return this.playerOrder;
+  }
+
+  getPlayerOrder() {
+    // Use custom order if set, otherwise default to object keys order
+    if (this.playerOrder.length > 0) {
+      return this.playerOrder.filter(id => this.players[id]); // Filter out removed players
+    }
+    return Object.keys(this.players);
   }
 
   startNewHand() {
@@ -439,7 +469,7 @@ class PokerGame {
   }
 
   postBlinds() {
-    const playerIds = Object.keys(this.players);
+    const playerIds = this.getPlayerOrder();
     if (playerIds.length < 2) return;
 
     // Small blind
@@ -745,214 +775,192 @@ class PokerGame {
   }
 }
 
-// Game rooms storage with persistence
+// Single global game storage
 const fs = require('fs');
-const gameRooms = new Map();
-const GAMES_FILE = path.join(__dirname, 'games.json');
+let globalGame = null;
+const GAME_FILE = path.join(__dirname, 'game.json');
+const ROOM_CODE = 'MAIN';
 
 function generateRoomCode() {
   return Math.random().toString(36).substr(2, 6).toUpperCase();
 }
 
-// Load existing games on startup
-function loadGames() {
+// Load existing game on startup
+function loadGame() {
   try {
-    if (fs.existsSync(GAMES_FILE)) {
-      const data = fs.readFileSync(GAMES_FILE, 'utf8');
-      const savedGames = JSON.parse(data);
+    if (fs.existsSync(GAME_FILE)) {
+      const data = fs.readFileSync(GAME_FILE, 'utf8');
+      const gameData = JSON.parse(data);
       
-      Object.entries(savedGames).forEach(([roomCode, gameData]) => {
-        const game = new PokerGame(roomCode);
-        Object.assign(game, gameData);
-        // Convert date strings back to Date objects
-        game.createdAt = new Date(game.createdAt);
-        game.lastActivity = new Date(game.lastActivity);
-        
-        // Only load non-expired games
-        if (!game.isExpired()) {
-          gameRooms.set(roomCode, game);
-          console.log(`Restored room: ${roomCode}`);
-        }
-      });
+      globalGame = new PokerGame(ROOM_CODE);
+      Object.assign(globalGame, gameData);
+      // Convert date strings back to Date objects
+      globalGame.createdAt = new Date(globalGame.createdAt);
+      globalGame.lastActivity = new Date(globalGame.lastActivity);
+      
+      // Only load if not expired
+      if (globalGame.isExpired()) {
+        globalGame = null;
+        console.log('Expired game discarded');
+      } else {
+        console.log('Restored global game');
+      }
     }
   } catch (error) {
-    console.error('Error loading games:', error);
+    console.error('Error loading game:', error);
+    globalGame = null;
   }
 }
 
-// Save games to file
-function saveGames() {
+// Save game to file
+function saveGame() {
   try {
-    const gamesToSave = {};
-    gameRooms.forEach((game, roomCode) => {
-      gamesToSave[roomCode] = game;
-    });
-    fs.writeFileSync(GAMES_FILE, JSON.stringify(gamesToSave, null, 2));
+    if (globalGame) {
+      fs.writeFileSync(GAME_FILE, JSON.stringify(globalGame, null, 2));
+    }
   } catch (error) {
-    console.error('Error saving games:', error);
+    console.error('Error saving game:', error);
   }
 }
 
-// Load games on startup
-loadGames();
+// Load game on startup
+loadGame();
 
-// Save games every 2 minutes and clean up expired rooms
+// Save game every 2 minutes
 setInterval(() => {
-  const now = new Date();
-  gameRooms.forEach((game, roomCode) => {
-    if (game.isExpired()) {
-      console.log(`Cleaning up expired room: ${roomCode}`);
-      gameRooms.delete(roomCode);
-    }
-  });
+  if (globalGame && globalGame.isExpired()) {
+    console.log('Global game expired, clearing');
+    globalGame = null;
+  }
   
-  // Save current games
-  saveGames();
+  saveGame();
 }, 2 * 60 * 1000); // 2 minutes
 
-// Save games on process exit
-process.on('SIGTERM', saveGames);
-process.on('SIGINT', saveGames);
+// Save game on process exit
+process.on('SIGTERM', saveGame);
+process.on('SIGINT', saveGame);
 
 // Socket.io event handlers
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  socket.on('createRoom', (data) => {
-    const roomCode = generateRoomCode();
-    const game = new PokerGame(roomCode);
-    
+  socket.on('joinGame', (data) => {
     try {
-      const player = game.addPlayer(data.playerId, data.playerName, true); // Creator is admin
-      gameRooms.set(roomCode, game);
+      // Create global game if it doesn't exist
+      if (!globalGame) {
+        globalGame = new PokerGame(ROOM_CODE);
+      }
       
-      socket.join(roomCode);
-      socket.emit('roomJoined', {
-        roomCode: roomCode,
-        gameState: game.getGameState()
-      });
-
-      socket.broadcast.to(roomCode).emit('playerJoined', {
-        playerId: data.playerId,
-        playerName: data.playerName
-      });
-
-      console.log(`Room ${roomCode} created by ${data.playerName} (admin)`);
-    } catch (error) {
-      socket.emit('error', { message: error.message });
-    }
-  });
-
-  socket.on('joinRoom', (data) => {
-    const game = gameRooms.get(data.roomCode);
-    if (!game) {
-      socket.emit('error', { message: 'Room not found' });
-      return;
-    }
-
-    try {
-      // Try to rejoin first (for refresh scenarios)
-      let player = game.rejoinPlayer(data.playerId);
+      // Try to rejoin first
+      let player = globalGame.rejoinPlayer(data.playerId);
       let isRejoining = !!player;
       
       if (!player) {
-        // Add as new player
-        player = game.addPlayer(data.playerId, data.playerName);
+        // Add as new player, first player becomes admin
+        const isFirstPlayer = Object.keys(globalGame.players).length === 0;
+        player = globalGame.addPlayer(data.playerId, data.playerName, isFirstPlayer);
       }
       
-      socket.join(data.roomCode);
+      socket.join(ROOM_CODE);
       
-      socket.emit('roomJoined', {
-        roomCode: data.roomCode,
-        gameState: game.getGameState(),
+      socket.emit('gameJoined', {
+        roomCode: ROOM_CODE,
+        gameState: globalGame.getGameState(),
         isRejoining: isRejoining
       });
 
       if (!isRejoining) {
-        socket.broadcast.to(data.roomCode).emit('playerJoined', {
+        socket.broadcast.to(ROOM_CODE).emit('playerJoined', {
           playerId: data.playerId,
           playerName: data.playerName
         });
-        console.log(`${data.playerName} joined room ${data.roomCode}`);
+        console.log(`${data.playerName} joined the game`);
       } else {
-        console.log(`${data.playerName} rejoined room ${data.roomCode}`);
+        console.log(`${data.playerName} rejoined the game`);
       }
+      
+      saveGame();
     } catch (error) {
       socket.emit('error', { message: error.message });
     }
   });
 
+  // Legacy support for old joinRoom events - redirect to joinGame
+  socket.on('joinRoom', (data) => {
+    socket.emit('joinGame', data);
+  });
+
   socket.on('startGame', (data) => {
-    const game = gameRooms.get(data.roomCode);
-    if (!game || game.gameStarted) return;
+    if (!globalGame || globalGame.gameStarted) return;
 
     try {
-      game.startGame(data.startingPlayerId);
-      io.to(data.roomCode).emit('gameStarted', {
-        gameState: game.getGameState(),
+      globalGame.startGame(data.startingPlayerId);
+      io.to(ROOM_CODE).emit('gameStarted', {
+        gameState: globalGame.getGameState(),
         startingPlayer: data.startingPlayerId
       });
-      console.log(`Game started in room ${data.roomCode} with starting player: ${data.startingPlayerId || 'default'}`);
+      console.log(`Game started with starting player: ${data.startingPlayerId || 'default'}`);
+      saveGame();
     } catch (error) {
       socket.emit('error', { message: error.message });
     }
   });
 
   socket.on('setStartingPlayer', (data) => {
-    const game = gameRooms.get(data.roomCode);
-    if (!game) return;
+    if (!globalGame) return;
 
     try {
-      const startingPlayerId = game.setStartingPlayer(data.adminId, data.startingPlayerId);
-      const startingPlayer = game.players[startingPlayerId];
+      const startingPlayerId = globalGame.setStartingPlayer(data.adminId, data.startingPlayerId);
+      const startingPlayer = globalGame.players[startingPlayerId];
       
-      io.to(data.roomCode).emit('startingPlayerSet', {
+      io.to(ROOM_CODE).emit('startingPlayerSet', {
         startingPlayerId: startingPlayerId,
         startingPlayerName: startingPlayer.name,
-        gameState: game.getGameState()
+        gameState: globalGame.getGameState()
       });
 
-      console.log(`Starting player set to ${startingPlayer.name} in room ${data.roomCode}`);
+      console.log(`Starting player set to ${startingPlayer.name}`);
+      saveGame();
     } catch (error) {
       socket.emit('error', { message: error.message });
     }
   });
 
   socket.on('performAction', (data) => {
-    const game = gameRooms.get(data.roomCode);
-    if (!game || game.gameEnded) return;
+    if (!globalGame || globalGame.gameEnded) return;
 
     try {
-      const result = game.performAction(data.playerId, data.action, data.amount);
-      const player = game.players[data.playerId];
+      const result = globalGame.performAction(data.playerId, data.action, data.amount);
+      const player = globalGame.players[data.playerId];
       
-      io.to(data.roomCode).emit('actionPerformed', {
+      io.to(ROOM_CODE).emit('actionPerformed', {
         playerId: data.playerId,
         playerName: player.name,
         action: data.action,
         amount: data.amount,
         result: result,
-        gameState: game.getGameState()
+        gameState: globalGame.getGameState()
       });
 
-      if (game.winner) {
-        const winner = game.players[game.winner];
-        io.to(data.roomCode).emit('handWon', {
+      if (globalGame.winner) {
+        const winner = globalGame.players[globalGame.winner];
+        io.to(ROOM_CODE).emit('handWon', {
           winner: winner.name,
-          winnerId: game.winner,
+          winnerId: globalGame.winner,
           pot: result.pot
         });
       }
+      
+      saveGame();
     } catch (error) {
       socket.emit('error', { message: error.message });
     }
   });
 
   socket.on('getValidActions', (data) => {
-    const game = gameRooms.get(data.roomCode);
-    if (!game) return;
+    if (!globalGame) return;
 
-    const validActions = game.getValidActions(data.playerId);
+    const validActions = globalGame.getValidActions(data.playerId);
     socket.emit('validActions', {
       playerId: data.playerId,
       actions: validActions
@@ -960,21 +968,21 @@ io.on('connection', (socket) => {
   });
 
   socket.on('deletePlayer', (data) => {
-    const game = gameRooms.get(data.roomCode);
-    if (!game) return;
+    if (!globalGame) return;
 
     try {
-      const success = game.deletePlayer(data.adminId, data.targetPlayerId);
+      const success = globalGame.deletePlayer(data.adminId, data.targetPlayerId);
       if (success) {
         const deletedPlayerName = data.targetPlayerName || 'Player';
         
-        io.to(data.roomCode).emit('playerDeleted', {
+        io.to(ROOM_CODE).emit('playerDeleted', {
           deletedPlayerId: data.targetPlayerId,
           deletedPlayerName: deletedPlayerName,
-          gameState: game.getGameState()
+          gameState: globalGame.getGameState()
         });
 
-        console.log(`Player ${deletedPlayerName} deleted from room ${data.roomCode}`);
+        console.log(`Player ${deletedPlayerName} deleted from game`);
+        saveGame();
       }
     } catch (error) {
       socket.emit('error', { message: error.message });
@@ -982,25 +990,25 @@ io.on('connection', (socket) => {
   });
 
   socket.on('editPot', (data) => {
-    const game = gameRooms.get(data.roomCode);
-    if (!game) return;
+    if (!globalGame) return;
 
     try {
-      const newPot = game.editPot(data.adminId, data.newPotValue);
+      const newPot = globalGame.editPot(data.adminId, data.newPotValue);
       
-      io.to(data.roomCode).emit('potEdited', {
+      io.to(ROOM_CODE).emit('potEdited', {
         newPot: newPot,
-        gameState: game.getGameState()
+        gameState: globalGame.getGameState()
       });
 
-      console.log(`Pot edited to $${newPot} in room ${data.roomCode}`);
+      console.log(`Pot edited to $${newPot}`);
+      saveGame();
     } catch (error) {
       socket.emit('error', { message: error.message });
     }
   });
 
   socket.on('chatMessage', (data) => {
-    socket.broadcast.to(data.roomCode).emit('chatMessage', {
+    socket.broadcast.to(ROOM_CODE).emit('chatMessage', {
       playerName: data.playerName,
       message: data.message,
       timestamp: new Date()
@@ -1008,33 +1016,33 @@ io.on('connection', (socket) => {
   });
 
   socket.on('newHand', (data) => {
-    const game = gameRooms.get(data.roomCode);
-    if (!game) return;
+    if (!globalGame) return;
 
-    game.startNewHand();
-    io.to(data.roomCode).emit('newHandStarted', {
-      gameState: game.getGameState()
+    globalGame.startNewHand();
+    io.to(ROOM_CODE).emit('newHandStarted', {
+      gameState: globalGame.getGameState()
     });
+    saveGame();
   });
 
   socket.on('resetGame', (data) => {
-    const game = gameRooms.get(data.roomCode);
-    if (!game) return;
+    if (!globalGame) return;
 
-    game.reset();
-    io.to(data.roomCode).emit('gameReset', {
-      gameState: game.getGameState()
+    globalGame.reset();
+    io.to(ROOM_CODE).emit('gameReset', {
+      gameState: globalGame.getGameState()
     });
+    saveGame();
   });
 
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
-    // Handle player leaving rooms
-    gameRooms.forEach((game, roomCode) => {
-      Object.keys(game.players).forEach(playerId => {
+    // Handle player leaving global game
+    if (globalGame) {
+      Object.keys(globalGame.players).forEach(playerId => {
         // This is simplified - in production you'd track socket IDs to player IDs
       });
-    });
+    }
   });
 });
 
