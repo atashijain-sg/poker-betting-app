@@ -465,6 +465,7 @@
         let gameState = {};
         let validActions = [];
         let currentBetAction = '';
+        let lastUpdate = 0;
 
         // Generate or restore player ID from localStorage
         playerId = localStorage.getItem('pokerId') || 'player_' + Math.random().toString(36).substr(2, 9);
@@ -481,21 +482,24 @@
 
         // Auto-rejoin on page load if session exists
         window.addEventListener('load', () => {
-            const savedName = localStorage.getItem('pokerName');
-            const savedRoom = localStorage.getItem('pokerRoom');
-            
-            if (savedName && savedRoom) {
-                document.getElementById('playerName').value = savedName;
-                document.getElementById('roomCode').value = savedRoom;
-                playerName = savedName;
+            // Small delay to prevent immediate flickering
+            setTimeout(() => {
+                const savedName = localStorage.getItem('pokerName');
+                const savedRoom = localStorage.getItem('pokerRoom');
                 
-                // Auto-rejoin
-                socket.emit('joinRoom', { 
-                    playerId: playerId, 
-                    playerName: savedName, 
-                    roomCode: savedRoom 
-                });
-            }
+                if (savedName && savedRoom) {
+                    document.getElementById('playerName').value = savedName;
+                    document.getElementById('roomCode').value = savedRoom;
+                    playerName = savedName;
+                    
+                    // Auto-rejoin
+                    socket.emit('joinRoom', { 
+                        playerId: playerId, 
+                        playerName: savedName, 
+                        roomCode: savedRoom 
+                    });
+                }
+            }, 200);
         });
 
         // Socket event listeners
@@ -578,12 +582,7 @@
             document.getElementById('newHandBtn').style.display = 'none';
         });
 
-        socket.on('validActions', (data) => {
-            if (data.playerId === playerId) {
-                validActions = data.actions;
-                updateBettingControls();
-            }
-        });
+
 
         socket.on('chatMessage', (data) => {
             addChatMessage(data.playerName, data.message);
@@ -730,109 +729,182 @@
         }
 
         function updateGameDisplay() {
+            // Debounce updates to prevent flickering
+            const now = Date.now();
+            if (now - lastUpdate < 100) return; // Limit updates to once per 100ms
+            lastUpdate = now;
+            
             // Update game info
-            document.getElementById('potValue').textContent = '$' + (gameState.pot || 0);
-            document.getElementById('currentBetValue').textContent = '$' + (gameState.currentBet || 0);
+            const potValue = document.getElementById('potValue');
+            const newPotText = '$' + (gameState.pot || 0);
+            if (potValue.textContent !== newPotText) {
+                potValue.textContent = newPotText;
+            }
+            
+            const currentBetValue = document.getElementById('currentBetValue');
+            const newBetText = '$' + (gameState.currentBet || 0);
+            if (currentBetValue.textContent !== newBetText) {
+                currentBetValue.textContent = newBetText;
+            }
             
             // Show pot edit button for admin
             const editPotBtn = document.getElementById('editPotBtn');
-            if (gameState.admin === playerId) {
+            const shouldShowEditBtn = gameState.admin === playerId;
+            if (editPotBtn.style.display === 'none' && shouldShowEditBtn) {
                 editPotBtn.style.display = 'block';
-            } else {
+            } else if (editPotBtn.style.display === 'block' && !shouldShowEditBtn) {
                 editPotBtn.style.display = 'none';
             }
             
             const rounds = ['Pre-flop', 'Flop', 'Turn', 'River'];
-            document.getElementById('bettingRoundValue').textContent = rounds[gameState.bettingRound] || 'Pre-flop';
+            const bettingRoundValue = document.getElementById('bettingRoundValue');
+            const newRoundText = rounds[gameState.bettingRound] || 'Pre-flop';
+            if (bettingRoundValue.textContent !== newRoundText) {
+                bettingRoundValue.textContent = newRoundText;
+            }
             
-            // Update players
+            // Update players count
             const playerCount = Object.keys(gameState.players || {}).length;
-            document.getElementById('playerCountValue').textContent = playerCount;
+            const playerCountValue = document.getElementById('playerCountValue');
+            if (playerCountValue.textContent !== playerCount.toString()) {
+                playerCountValue.textContent = playerCount;
+            }
             
+            // Update players list (only if players have changed)
+            updatePlayersList();
+            updateBettingControls();
+        }
+
+        function updatePlayersList() {
             const playersList = document.getElementById('playersList');
-            playersList.innerHTML = '';
+            const currentPlayers = Object.values(gameState.players || {});
             
-            Object.values(gameState.players || {}).forEach(player => {
+            // Check if players have actually changed
+            const existingCards = playersList.children;
+            if (existingCards.length === currentPlayers.length) {
+                let playersChanged = false;
+                for (let i = 0; i < currentPlayers.length; i++) {
+                    const player = currentPlayers[i];
+                    const card = existingCards[i];
+                    if (!card || card.dataset.playerId !== player.id) {
+                        playersChanged = true;
+                        break;
+                    }
+                }
+                if (!playersChanged) {
+                    // Just update the content without recreating elements
+                    for (let i = 0; i < currentPlayers.length; i++) {
+                        updatePlayerCard(existingCards[i], currentPlayers[i]);
+                    }
+                    return;
+                }
+            }
+            
+            // Recreate player cards only if necessary
+            playersList.innerHTML = '';
+            currentPlayers.forEach(player => {
                 const playerCard = document.createElement('div');
                 playerCard.className = 'player-card';
-                
-                if (player.id === gameState.currentPlayer) {
-                    playerCard.classList.add('current-player');
-                }
-                if (player.hasFolded) {
-                    playerCard.classList.add('folded');
-                }
-                
-                let statusClass = 'status-active';
-                let statusText = 'Active';
-                if (player.hasFolded) {
-                    statusClass = 'status-folded';
-                    statusText = 'Folded';
-                } else if (player.isAllIn) {
-                    statusClass = 'status-allin';
-                    statusText = 'All-in';
-                }
-                
-                let adminBadge = '';
-                if (player.id === gameState.admin) {
-                    adminBadge = '<span class="admin-badge">ADMIN</span>';
-                }
-
-                let deleteButton = '';
-                if (gameState.admin === playerId && player.id !== playerId && !gameState.gameStarted) {
-                    deleteButton = `<button class="delete-btn" onclick="deletePlayer('${player.id}', '${player.name}')">✕</button>`;
-                }
-
-                playerCard.innerHTML = `
-                    <div class="player-status ${statusClass}">${statusText}</div>
-                    ${deleteButton}
-                    <div class="player-name">${player.name}${adminBadge}</div>
-                    <div class="player-chips">💰 $${player.chips}</div>
-                    <div class="player-bet">Current bet: $${player.currentBet || 0}</div>
-                `;
-                
+                playerCard.dataset.playerId = player.id;
+                updatePlayerCard(playerCard, player);
                 playersList.appendChild(playerCard);
             });
+        }
+
+        function updatePlayerCard(playerCard, player) {
+            // Update classes
+            playerCard.className = 'player-card';
+            if (player.id === gameState.currentPlayer) {
+                playerCard.classList.add('current-player');
+            }
+            if (player.hasFolded) {
+                playerCard.classList.add('folded');
+            }
             
-            updateBettingControls();
+            let statusClass = 'status-active';
+            let statusText = 'Active';
+            if (player.hasFolded) {
+                statusClass = 'status-folded';
+                statusText = 'Folded';
+            } else if (player.isAllIn) {
+                statusClass = 'status-allin';
+                statusText = 'All-in';
+            }
+            
+            let adminBadge = '';
+            if (player.id === gameState.admin) {
+                adminBadge = '<span class="admin-badge">ADMIN</span>';
+            }
+
+            let deleteButton = '';
+            if (gameState.admin === playerId && player.id !== playerId && !gameState.gameStarted) {
+                deleteButton = `<button class="delete-btn" onclick="deletePlayer('${player.id}', '${player.name}')">✕</button>`;
+            }
+
+            playerCard.innerHTML = `
+                <div class="player-status ${statusClass}">${statusText}</div>
+                ${deleteButton}
+                <div class="player-name">${player.name}${adminBadge}</div>
+                <div class="player-chips">💰 $${player.chips}</div>
+                <div class="player-bet">Current bet: $${player.currentBet || 0}</div>
+            `;
         }
 
         function updateBettingControls() {
             const controls = document.getElementById('bettingControls');
             const buttonsContainer = document.getElementById('bettingButtons');
             
-            if (gameState.currentPlayer === playerId && gameState.gameStarted) {
+            const shouldShowControls = gameState.currentPlayer === playerId && gameState.gameStarted;
+            
+            if (shouldShowControls && controls.style.display === 'none') {
                 controls.style.display = 'block';
-                
-                // Get valid actions
+                // Get valid actions only when controls become visible
                 socket.emit('getValidActions', { roomCode: currentRoomCode, playerId: playerId });
-                
-                // Clear existing buttons
-                buttonsContainer.innerHTML = '';
-                
-                // Add buttons based on valid actions (will be updated when validActions is received)
-                setTimeout(() => {
-                    validActions.forEach(action => {
-                        const button = document.createElement('button');
-                        button.className = 'button';
-                        button.textContent = action.charAt(0).toUpperCase() + action.slice(1);
-                        
-                        if (action === 'bet' || action === 'raise') {
-                            button.onclick = () => showBetInput(action);
-                        } else {
-                            button.onclick = () => performAction(action);
-                        }
-                        
-                        buttonsContainer.appendChild(button);
-                    });
-                }, 100);
-            } else {
+            } else if (!shouldShowControls && controls.style.display === 'block') {
                 controls.style.display = 'none';
+                buttonsContainer.innerHTML = ''; // Clear buttons when hiding
             }
+        }
+
+        // Update betting buttons when valid actions are received
+        socket.on('validActions', (data) => {
+            if (data.playerId === playerId) {
+                validActions = data.actions;
+                updateBettingButtons();
+            }
+        });
+
+        function updateBettingButtons() {
+            const buttonsContainer = document.getElementById('bettingButtons');
+            
+            // Only update if controls are visible
+            if (document.getElementById('bettingControls').style.display === 'none') return;
+            
+            // Clear existing buttons
+            buttonsContainer.innerHTML = '';
+            
+            validActions.forEach(action => {
+                const button = document.createElement('button');
+                button.className = 'button';
+                button.textContent = action.charAt(0).toUpperCase() + action.slice(1);
+                
+                if (action === 'bet' || action === 'raise') {
+                    button.onclick = () => showBetInput(action);
+                } else {
+                    button.onclick = () => performAction(action);
+                }
+                
+                buttonsContainer.appendChild(button);
+            });
         }
 
         function addBettingHistory(message) {
             const historyList = document.getElementById('bettingHistoryList');
+            
+            // Check if this message was already added (prevent duplicates)
+            const lastItem = historyList.lastElementChild;
+            if (lastItem && lastItem.textContent === message) return;
+            
             const item = document.createElement('div');
             item.className = 'history-item';
             item.textContent = message;
