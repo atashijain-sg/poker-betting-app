@@ -244,7 +244,7 @@ class PokerGame {
     this.gameStarted = false;
     this.gameEnded = false;
     this.winner = null;
-    this.maxPlayers = 8;
+    this.maxPlayers = 10;
     this.pot = 0;
     this.currentBet = 0;
     this.bettingRound = 0; // 0 = pre-flop, 1 = flop, 2 = turn, 3 = river
@@ -313,15 +313,31 @@ class PokerGame {
   }
 
   canDeletePlayer(adminId, targetPlayerId) {
-    return this.admin === adminId && this.players[targetPlayerId] && !this.gameStarted;
+    return this.admin === adminId && this.players[targetPlayerId] && targetPlayerId !== adminId;
   }
 
   deletePlayer(adminId, targetPlayerId) {
     if (!this.canDeletePlayer(adminId, targetPlayerId)) {
-      throw new Error('Only admin can delete players before game starts');
+      throw new Error('Only admin can remove other players');
+    }
+    
+    // If removing current player, move to next player
+    if (this.currentPlayer === targetPlayerId && this.gameStarted) {
+      this.nextPlayer();
     }
     
     this.removePlayer(targetPlayerId);
+    
+    // Check if game should end (less than 2 players)
+    const activePlayers = Object.values(this.players).filter(p => !p.hasFolded);
+    if (activePlayers.length < 2 && this.gameStarted) {
+      if (activePlayers.length === 1) {
+        this.endHand(activePlayers[0].id);
+      } else {
+        this.gameEnded = true;
+      }
+    }
+    
     this.updateActivity();
     return true;
   }

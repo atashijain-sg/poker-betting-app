@@ -152,9 +152,15 @@
 
         .players-list {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 15px;
             margin-bottom: 30px;
+        }
+
+        @media (min-width: 1200px) {
+            .players-list {
+                grid-template-columns: repeat(5, 1fr); /* 5 columns for 10 players */
+            }
         }
 
         .player-card {
@@ -355,7 +361,7 @@
     <div class="container">
         <div class="header">
             <h1>🎰 Texas Hold'em Poker Chips</h1>
-            <p>Play no-limit poker with friends - betting chips only!</p>
+            <p>Play no-limit poker with friends - betting chips only! (Up to 10 players)</p>
             <div class="session-info">
                 <span class="label">Session ID:</span> <span id="sessionId"></span>
                 <span style="margin: 0 20px;">|</span>
@@ -647,7 +653,8 @@
 
         function deletePlayer(targetPlayerId, targetPlayerName) {
             if (!currentRoomCode) return;
-            if (confirm(`Remove ${targetPlayerName} from the game?`)) {
+            const gameStatus = gameState.gameStarted ? 'during the game' : 'from the lobby';
+            if (confirm(`Remove ${targetPlayerName} ${gameStatus}? They will lose their chips and position.`)) {
                 socket.emit('deletePlayer', { 
                     roomCode: currentRoomCode, 
                     adminId: playerId,
@@ -839,8 +846,8 @@
             }
 
             let deleteButton = '';
-            if (gameState.admin === playerId && player.id !== playerId && !gameState.gameStarted) {
-                deleteButton = `<button class="delete-btn" onclick="deletePlayer('${player.id}', '${player.name}')">✕</button>`;
+            if (gameState.admin === playerId && player.id !== playerId) {
+                deleteButton = `<button class="delete-btn" onclick="deletePlayer('${player.id}', '${player.name}')" title="Remove player">✕</button>`;
             }
 
             playerCard.innerHTML = `
