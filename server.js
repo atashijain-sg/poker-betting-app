@@ -396,12 +396,17 @@ class PokerGame {
     
     const potWon = this.pot;
     this.pot = 0;
+    
+    // Advance dealer position to shift blinds for next hand
+    this.dealerIndex = (this.dealerIndex + 1) % this.getPlayerOrder().length;
+    
     this.updateActivity();
     
     return {
       winnerId: winnerId,
       winnerName: this.players[winnerId].name,
-      potWon: potWon
+      potWon: potWon,
+      newDealerIndex: this.dealerIndex
     };
   }
 
@@ -1079,10 +1084,11 @@ io.on('connection', (socket) => {
         winnerId: result.winnerId,
         winnerName: result.winnerName,
         potWon: result.potWon,
+        newDealerIndex: result.newDealerIndex,
         gameState: globalGame.getGameState()
       });
 
-      console.log(`Winner declared: ${result.winnerName} wins $${result.potWon}`);
+      console.log(`Winner declared: ${result.winnerName} wins $${result.potWon}, dealer position advanced`);
       saveGame();
     } catch (error) {
       socket.emit('error', { message: error.message });

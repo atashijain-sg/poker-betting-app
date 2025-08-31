@@ -298,6 +298,26 @@
             margin-left: 5px;
         }
 
+        .dealer-badge {
+            background: #00ccff;
+            color: #000;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+
+        .blind-badge {
+            background: #ff9900;
+            color: #000;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+
         .delete-btn {
             position: absolute;
             top: 25px;
@@ -494,6 +514,7 @@
                         <li><strong>Small Blind:</strong> $10</li>
                         <li><strong>Big Blind:</strong> $20</li>
                         <li><strong>Starting Chips:</strong> $1000</li>
+                        <li><strong>Blinds rotate:</strong> After each hand</li>
                         <li><strong>Session:</strong> 4 hours</li>
                     </ul>
                 </div>
@@ -714,7 +735,16 @@
         socket.on('winnerDeclared', (data) => {
             gameState = data.gameState;
             updateGameDisplay();
-            showSuccess(`🏆 ${data.winnerName} wins the hand! Pot: $${data.potWon}`);
+            
+            // Show winner and blind shift info
+            const playerOrder = Object.keys(gameState.players);
+            const newSmallBlindIndex = (data.newDealerIndex + 1) % playerOrder.length;
+            const newBigBlindIndex = (data.newDealerIndex + 2) % playerOrder.length;
+            const smallBlindPlayer = gameState.players[playerOrder[newSmallBlindIndex]];
+            const bigBlindPlayer = gameState.players[playerOrder[newBigBlindIndex]];
+            
+            showSuccess(`🏆 ${data.winnerName} wins $${data.potWon}! 
+                        Next hand: ${smallBlindPlayer.name} (SB), ${bigBlindPlayer.name} (BB)`);
             playChime(); // Play victory chime
             updateWinnerControls(); // Hide winner controls
         });
@@ -1240,6 +1270,22 @@
                 adminBadge += '<span class="original-admin-badge">ORIGINAL</span>';
             }
 
+            // Add dealer and blind badges
+            let positionBadge = '';
+            if (gameState.gameStarted) {
+                const playerOrder = Object.keys(gameState.players);
+                const playerIndex = playerOrder.indexOf(player.id);
+                const dealerIndex = gameState.dealerIndex;
+                
+                if (playerIndex === dealerIndex) {
+                    positionBadge += '<span class="dealer-badge">DEALER</span>';
+                } else if (playerIndex === (dealerIndex + 1) % playerOrder.length) {
+                    positionBadge += '<span class="blind-badge">SB</span>';
+                } else if (playerIndex === (dealerIndex + 2) % playerOrder.length) {
+                    positionBadge += '<span class="blind-badge">BB</span>';
+                }
+            }
+
             let deleteButton = '';
             if (gameState.admin === playerId && player.id !== playerId) {
                 deleteButton = `<button class="delete-btn" onclick="deletePlayer('${player.id}', '${player.name}')" title="Remove player">✕</button>`;
@@ -1248,7 +1294,7 @@
             playerCard.innerHTML = `
                 <div class="player-status ${statusClass}">${statusText}</div>
                 ${deleteButton}
-                <div class="player-name">${player.name}${adminBadge}</div>
+                <div class="player-name">${player.name}${adminBadge}${positionBadge}</div>
                 <div class="player-chips">💰 $${player.chips}</div>
                 <div class="player-bet">Current bet: $${player.currentBet || 0}</div>
             `;
