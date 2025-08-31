@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimal PDF Notebook</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2rem; }
+        .loading { text-align: center; padding: 2rem; color: #666; }
+        .notebook-page { 
+            display: flex; 
+            margin-bottom: 2rem; 
+            border: 1px solid #ddd; 
+            min-height: 600px;
+        }
+        .pdf-side { 
+            flex: 1; 
+            padding: 1rem; 
+            border-right: 2px solid #e74c3c; 
+        }
+        .notes-side { 
+            flex: 1; 
+            padding: 1rem; 
+        }
+        .notes-textarea {
+            width: 100%;
+            height: 500px;
+            border: 1px solid #ddd;
+            padding: 1rem;
+            font-family: Georgia, serif;
+        }
+        .pdf-canvas { 
+            max-width: 100%; 
+            border: 1px solid #ddd; 
+        }
+    </style>
+</head>
+<body>
+    <h1>📖 Minimal PDF Notebook</h1>
+    
+    <div id="loading" class="loading">Loading PDF...</div>
+    <div id="content" style="display: none;">
+        <div id="pages-container"></div>
+    </div>
+
+    <script>
+        // Setup PDF.js (same as working test)
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        let pdfDoc = null;
+        let totalPages = 0;
+
+        async function loadPDF() {
+            try {
+                console.log('Starting PDF load...');
+                document.getElementById('loading').textContent = 'Fetching PDF...';
+                
+                // Use exact same fetch method as working test
+                const response = await fetch('/api/pdf-proxy');
+                console.log('Fetch response:', response.status, response.statusText);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                document.getElementById('loading').textContent = 'Converting to ArrayBuffer...';
+                const arrayBuffer = await response.arrayBuffer();
+                console.log('ArrayBuffer size:', arrayBuffer.byteLength);
+                
+                document.getElementById('loading').textContent = 'Loading with PDF.js...';
+                
+                // Use exact same PDF.js method as working test
+                const loadingTask = pdfjsLib.getDocument(arrayBuffer);
+                pdfDoc = await loadingTask.promise;
+                totalPages = pdfDoc.numPages;
+                
+                console.log('PDF loaded successfully, pages:', totalPages);
+                
+                document.getElementById('loading').textContent = 'Rendering pages...';
+                
+                // Render pages
+                for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                    await renderPage(pageNum);
+                    document.getElementById('loading').textContent = `Rendering page ${pageNum}/${totalPages}...`;
+                }
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+                
+            } catch (error) {
+                console.error('PDF loading error:', error);
+                document.getElementById('loading').innerHTML = `
+                    <div style="color: red;">
+                        <h3>Error Loading PDF</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <p><strong>Type:</strong> ${error.name}</p>
+                        <p><strong>Stack:</strong> ${error.stack}</p>
+                        <button onclick="loadPDF()">🔄 Retry</button>
+                    </div>
+                `;
+            }
+        }
+
+        async function renderPage(pageNum) {
+            console.log('Rendering page', pageNum);
+            
+            const page = await pdfDoc.getPage(pageNum);
+            const scale = 1.2;
+            const viewport = page.getViewport({ scale });
+
+            // Create page container
+            const pageContainer = document.createElement('div');
+            pageContainer.className = 'notebook-page';
+            pageContainer.innerHTML = `
+                <div class="pdf-side">
+                    <h3>Page ${pageNum}</h3>
+                    <canvas id="canvas-${pageNum}" class="pdf-canvas"></canvas>
+                </div>
+                <div class="notes-side">
+                    <h3>Notes</h3>
+                    <textarea 
+                        class="notes-textarea" 
+                        placeholder="Write your notes for page ${pageNum} here..."
+                    ></textarea>
+                </div>
+            `;
+
+            document.getElementById('pages-container').appendChild(pageContainer);
+
+            // Render to canvas
+            const canvas = document.getElementById(`canvas-${pageNum}`);
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+
+            const renderContext = {
+                canvasContext: context,
+                viewport: viewport
+            };
+
+            await page.render(renderContext).promise;
+            console.log('Page', pageNum, 'rendered successfully');
+        }
+
+        // Load PDF when page is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded, starting PDF load...');
+            loadPDF();
+        });
+    </script>
+</body>
+</html>

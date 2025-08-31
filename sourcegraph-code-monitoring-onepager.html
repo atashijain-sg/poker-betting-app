@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Monitoring: The Missing Piece of Your Sourcegraph Workflow</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Source Sans Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            line-height: 1.1;
+            color: #ffffff;
+            background: linear-gradient(135deg, #0f1419 0%, #1a202c 100%);
+            max-width: 8.5in;
+            margin: 0 auto;
+            padding: 0.2in;
+            min-height: 11in;
+            font-size: 0.65rem;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 3px solid #ff5543;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .logo-img {
+            height: 36px;
+            width: auto;
+        }
+
+        .title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 4px;
+            line-height: 1.1;
+        }
+
+        .subtitle {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.8);
+            font-weight: 400;
+        }
+
+        .section {
+            margin-bottom: 6px;
+        }
+
+        .usage-metrics-section {
+            margin-bottom: 6px;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .chart-card {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 6px;
+            padding: 6px;
+            transition: transform 0.3s ease, border-color 0.3s ease;
+        }
+
+        .chart-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(255, 85, 67, 0.3);
+        }
+
+        .chart-header {
+            margin-bottom: 6px;
+        }
+
+        .chart-header h4 {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin: 0 0 2px 0;
+        }
+
+        .chart-period {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.7);
+            font-weight: 400;
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 8px;
+            padding: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .chart-image {
+            width: 100%;
+            height: auto;
+            border-radius: 6px;
+            display: block;
+        }
+
+        .image-placeholder {
+            text-align: center;
+            padding: 40px 20px;
+            color: rgba(255, 255, 255, 0.6);
+            background: rgba(255, 85, 67, 0.1);
+            border-radius: 6px;
+            border: 2px dashed rgba(255, 85, 67, 0.3);
+        }
+
+        .image-placeholder p {
+            margin: 0;
+            line-height: 1.5;
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .icon {
+            width: 24px;
+            height: 24px;
+            background: #ff5543;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .highlight-box {
+            background: linear-gradient(135deg, #ff5543 0%, #ff7a5c 100%);
+            color: white;
+            padding: 8px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .highlight-box h3 {
+            font-size: 1.1rem;
+            margin-bottom: 6px;
+        }
+
+        .highlight-box p {
+            font-size: 0.9rem;
+            opacity: 0.95;
+        }
+
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .column {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-left: 4px solid #ff5543;
+        }
+
+        .column h4 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 8px;
+        }
+
+        .use-case {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 8px;
+            margin-bottom: 6px;
+            position: relative;
+        }
+
+        .use-case::before {
+            content: "✓";
+            position: absolute;
+            top: 18px;
+            left: 18px;
+            background: #28a745;
+            color: white;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .use-case-content {
+            margin-left: 36px;
+        }
+
+        .use-case h4 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 6px;
+        }
+
+        .use-case p {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin: 24px 0;
+        }
+
+        .stat {
+            text-align: center;
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #ff5543;
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.8);
+            margin-top: 4px;
+        }
+
+        .cta-section {
+            background: rgba(255, 85, 67, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 85, 67, 0.2);
+            color: white;
+            padding: 24px;
+            border-radius: 12px;
+            text-align: center;
+            margin-top: 32px;
+        }
+
+        .cta-section h3 {
+            font-size: 1.3rem;
+            margin-bottom: 12px;
+        }
+
+        .cta-section p {
+            margin-bottom: 16px;
+            opacity: 0.9;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background: #ff5543;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: background 0.3s ease;
+        }
+
+        .cta-button:hover {
+            background: #e04435;
+        }
+
+        .workflow-diagram {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 20px 0;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+
+        .workflow-step {
+            text-align: center;
+            flex: 1;
+        }
+
+        .workflow-step .step-icon {
+            width: 40px;
+            height: 40px;
+            background: #ff5543;
+            border-radius: 50%;
+            margin: 0 auto 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .workflow-arrow {
+            font-size: 1.5rem;
+            color: #ff5543;
+            margin: 0 10px;
+        }
+
+        .footer {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.6);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 20px;
+        }
+
+        .monitor-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .step-card {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 12px;
+            transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+
+        .step-card:hover {
+            transform: translateX(4px);
+            border-color: rgba(255, 85, 67, 0.3);
+        }
+
+        .step-number {
+            background: #ff5543;
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
+
+        .step-content h4 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin: 0 0 6px 0;
+        }
+
+        .step-content p {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.8);
+            margin: 0 0 4px 0;
+        }
+
+        .step-content code {
+            background: rgba(255, 85, 67, 0.2);
+            color: #ff5543;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-family: 'Courier New', monospace;
+        }
+
+        .step-content ul {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .screenshot-placeholder {
+            margin-top: 12px;
+        }
+
+        .step-screenshot {
+            width: 100%;
+            max-width: 400px;
+            height: auto;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .visual-example, .config-example, .dashboard-example {
+            margin-top: 12px;
+        }
+
+        .mockup-ui {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            padding: 12px;
+            font-size: 0.8rem;
+        }
+
+        .mockup-searchbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+
+        .search-query {
+            font-family: monospace;
+            color: #ffffff;
+        }
+
+        .monitor-btn {
+            background: #ff5543;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+
+        .mockup-results {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .result-item {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .config-box {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            padding: 12px;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.9);
+            line-height: 1.6;
+        }
+
+        .monitor-list {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            padding: 12px;
+        }
+
+        .monitor-item {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .monitor-item:last-child {
+            border-bottom: none;
+        }
+
+        @media print {
+            * {
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+
+            @page {
+                margin: 0 !important;
+                size: auto !important;
+            }
+            
+            body {
+                padding: 0.3in 0.2in 0.2in 0.2in !important;
+                margin: 0 !important;
+                background: linear-gradient(135deg, #0f1419 0%, #1a202c 100%) !important;
+                background-color: #0f1419 !important;
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                font-size: 0.6rem !important;
+                line-height: 1.05 !important;
+            }
+            
+            html {
+                background: #0f1419 !important;
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            
+            .container {
+                max-width: none !important;
+                background: transparent !important;
+            }
+            
+            .charts-grid {
+                grid-template-columns: repeat(2, 1fr) !important;
+                gap: 12px !important;
+                margin-bottom: 12px !important;
+            }
+            
+            .chart-card {
+                page-break-inside: avoid;
+                margin-bottom: 8px;
+                padding: 8px !important;
+                background: rgba(255, 255, 255, 0.08) !important;
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            
+            .section {
+                margin-bottom: 12px !important;
+            }
+            
+            .usage-metrics-section {
+                margin-bottom: 16px !important;
+            }
+            
+            .section {
+                page-break-inside: avoid;
+            }
+            
+            .header, .highlight-box, .column, .use-case, .stat, .workflow-diagram {
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+        <div class="logo-container">
+            <img src="https://cdn.prod.website-files.com/673f71b4ebbb99190437de75/67917518352105f18532c234_Group%203.svg" alt="Sourcegraph" class="logo-img">
+        </div>
+        <h1 class="title">Sourcegraph Enterprise Usage Analysis</h1>
+        <p class="subtitle">Turn your search expertise into proactive code intelligence</p>
+    </div>
+
+    <div class="usage-metrics-section">
+        <h2 class="section-title">
+            <span class="icon">📊</span>
+            Your Current Sourcegraph Usage Shows Deep Enterprise Adoption
+        </h2>
+        
+        <div class="charts-grid">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h4>Search Patterns by Type</h4>
+                    <span class="chart-period">280K+ searches with regex leading at 12.1K peak</span>
+                </div>
+                <div class="chart-container">
+                    <img src="./search-patterns-chart.png" alt="All searches by pattern type showing regex, keyword, literal, standard, and structural search trends" class="chart-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <div class="image-placeholder" style="display: none;">
+                        <p>📊 Save your "All searches by pattern type" chart as<br><strong>search-patterns-chart.png</strong></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h4>Search Types Distribution</h4>
+                    <span class="chart-period">5.4K peak daily file searches across repositories</span>
+                </div>
+                <div class="chart-container">
+                    <img src="./search-types-chart.png" alt="All searches by type showing commit, diff, file, path, repo, and symbol search patterns" class="chart-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <div class="image-placeholder" style="display: none;">
+                        <p>📊 Save your "All searches by type" chart as<br><strong>search-types-chart.png</strong></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h4>Batch Changes Activity</h4>
+                    <span class="chart-period">265 batch changes opened in July 2025</span>
+                </div>
+                <div class="chart-container">
+                    <img src="./batch-changes-chart.png" alt="Batch Changes Activity showing opened, created, executed, published, and merged batch changes over time" class="chart-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <div class="image-placeholder" style="display: none;">
+                        <p>📊 Save your "Batch Changes Activity" chart as<br><strong>batch-changes-chart.png</strong></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h4>Code Insights Usage</h4>
+                    <span class="chart-period">28 insights created with consistent usage</span>
+                </div>
+                <div class="chart-container">
+                    <img src="./code-insights-chart.png" alt="Total code insights and insight page views showing 28 total insights with declining but steady usage" class="chart-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <div class="image-placeholder" style="display: none;">
+                        <p>📊 Save your "Code Insights" chart as<br><strong>code-insights-chart.png</strong></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="highlight-box">
+        <h3>You're Already a Sourcegraph Enterprise Power User</h3>
+        <p>Now it's time to make your search expertise work for you automatically, 24/7</p>
+    </div>
+
+    <div class="footer" style="margin-top: 160px; font-size: 0.75rem;">
+        <p>Want to know more about Advanced Search. <a href="https://sourcegraph.com/docs/code-search" style="color: #ff5543; text-decoration: underline;">Go here</a></p>
+        <p style="margin: 0; height: 0.5rem;"></p>
+        <p>Want to know more about Batch Changes. <a href="https://sourcegraph.com/docs/batch-changes" style="color: #ff5543; text-decoration: underline;">Go here</a></p>
+        <p style="margin: 0; height: 0.5rem;"></p>
+        <p>Want to know more about Code Navigation. <a href="https://sourcegraph.com/docs/code-search/code-navigation" style="color: #ff5543; text-decoration: underline;">Go here</a></p>
+        <p style="margin: 0; height: 0.5rem;"></p>
+        <p>Want to know more about Code Insights. <a href="https://sourcegraph.com/docs/code_insights" style="color: #ff5543; text-decoration: underline;">Go here</a></p>
+    </div>
+
+    <div class="section" style="page-break-before: always; font-size: 0.66rem;">
+        <h1 style="font-size: 1.53rem; font-weight: 700; color: #ff5543; text-align: center; margin-bottom: 24px; border-bottom: 2px solid rgba(255, 85, 67, 0.3); padding-bottom: 12px;">
+            Code Monitoring: The Missing Piece of Your Sourcegraph Workflow
+        </h1>
+        
+        <h2 class="section-title">
+            <span class="icon">1</span>
+            From Reactive Searching to Proactive Monitoring
+        </h2>
+        
+        <p>Code Monitoring transforms your existing Sourcegraph searches into intelligent, automated watchers that continuously scan your entire codebase. Instead of manually hunting for issues after they're introduced, it proactively alerts you the instant problematic patterns, security vulnerabilities, or policy violations are committed across any repository.</p>
+    </div>
+
+    <div class="section">
+        <h2 class="section-title">
+            <span class="icon">2</span>
+            Perfect Use Cases for Your Team
+        </h2>
+
+        <div class="two-column">
+            <div class="column">
+                <h4 style="font-size: 1.02rem;">Security & Compliance</h4>
+                <ul style="margin-left: 20px; color: rgba(255, 255, 255, 0.8); font-size: 0.66rem;">
+                    <li>Monitor for hardcoded secrets</li>
+                    <li>Track deprecated API usage</li>
+                    <li>Watch for compliance violations</li>
+                    <li>Detect insecure patterns</li>
+                </ul>
+            </div>
+            <div class="column">
+                <h4 style="font-size: 1.02rem;">Code Quality & Standards</h4>
+                <ul style="margin-left: 20px; color: rgba(255, 255, 255, 0.8); font-size: 0.66rem;">
+                    <li>Catch anti-patterns early</li>
+                    <li>Monitor coding standard violations</li>
+                    <li>Track technical debt introduction</li>
+                    <li>Watch critical dependency changes</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="use-case">
+            <div class="use-case-content">
+                <h4>Example: Security Monitoring</h4>
+                <p><strong>Search:</strong> <code>password\s*=\s*["'][^"']{8,}["']</code><br>
+                <strong>Alert:</strong> Get notified instantly when hardcoded passwords are committed, before they reach production.</p>
+            </div>
+        </div>
+
+        <div class="use-case">
+            <div class="use-case-content">
+                <h4>Example: Architecture Governance</h4>
+                <p><strong>Search:</strong> <code>import.*internal.*from.*external</code><br>
+                <strong>Alert:</strong> Catch architecture boundary violations as they happen, maintaining clean separation of concerns.</p>
+            </div>
+        </div>
+    </div>
+
+
+
+    <div class="section">
+        <h2 class="section-title">
+            <span class="icon">3</span>
+            Code Monitor Triggers & Setup
+        </h2>
+        
+        <p>Code Monitors in Sourcegraph run searches based on the trigger configuration you set up. There are two main types of triggers:</p>
+        
+        <div class="two-column">
+            <div class="column">
+                <h4 style="font-size: 1.02rem;">📅 Scheduled Triggers</h4>
+                <p style="font-size: 0.66rem;">For scheduled triggers, you can specify how often the search should run:</p>
+                <ul style="margin-left: 20px; color: rgba(255, 255, 255, 0.8); font-size: 0.66rem;">
+                    <li>Every 5 minutes</li>
+                    <li>Hourly</li>
+                    <li>Daily</li>
+                    <li>Weekly</li>
+                </ul>
+            </div>
+
+            <div class="column">
+                <h4 style="font-size: 1.02rem;">⚡ Event-Based Triggers</h4>
+                <p style="font-size: 0.66rem;">For event-based triggers, the search runs in response to specific events:</p>
+                <ul style="margin-left: 20px; color: rgba(255, 255, 255, 0.8); font-size: 0.66rem;">
+                    <li>When new commits are pushed to a repository</li>
+                    <li>When new changesets (pull/merge requests) are created</li>
+                    <li>When changesets are updated</li>
+                </ul>
+                    <div class="visual-example">
+                        <div class="mockup-ui">
+                            <div class="mockup-searchbar">
+                                <span class="search-query">password = "[^"]+""</span>
+                                <button class="monitor-btn">🔔 Monitor</button>
+                            </div>
+                            <div class="mockup-results">
+                                <div class="result-item">📄 src/auth/login.js: password = "hardcoded"</div>
+                                <div class="result-item">📄 src/config/db.js: password = "secret123"</div>
+                                <div class="result-item">📄 tests/setup.js: password = "testpass"</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            </div>
+            </div>
+
+            <div class="use-case">
+            <div class="use-case-content">
+            <h4 style="font-size: 1.02rem;">Setting Up a Code Monitor</h4>
+            <p style="font-size: 0.66rem;">To create a code monitor with a specific frequency:</p>
+            <ul style="margin: 8px 0 0 20px; color: rgba(255, 255, 255, 0.8); font-size: 0.66rem;">
+            <li>Navigate to the Code Monitoring page in Sourcegraph</li>
+            <li>Click "Create code monitor"</li>
+            <li>Define your search query</li>
+            <li>Select your trigger type and frequency</li>
+            <li>Configure your desired actions (email, webhook, Slack notification)</li>
+            </ul>
+            </div>
+            </div>
+    </div>
+
+    <div class="footer">
+        <p>Want to know more about Code Monitoring. <a href="https://sourcegraph.com/docs/code_monitoring/quickstart" style="color: #ff5543; text-decoration: underline;">Go here</a></p>
+    </div>
+    </div>
+</body>
+</html>

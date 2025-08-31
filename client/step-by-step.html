@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Step by Step Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+    <h1>📖 Step by Step Test</h1>
+    <div id="loading">Testing...</div>
+    <button onclick="testStep1()">Step 1: Basic Fetch</button>
+    <button onclick="testStep2()">Step 2: Add jsPDF</button>
+    <button onclick="testStep3()">Step 3: Add Variables</button>
+    <button onclick="testStep4()">Step 4: Add Input Elements</button>
+
+    <div id="results"></div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        // Step 1: Basic fetch test (we know this works)
+        async function testStep1() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<h3>Step 1: Basic Fetch Test</h3>';
+            
+            try {
+                const response = await fetch('/api/pdf-proxy');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const arrayBuffer = await response.arrayBuffer();
+                const loadingTask = pdfjsLib.getDocument(arrayBuffer);
+                const pdf = await loadingTask.promise;
+                
+                results.innerHTML += '<p style="color: green;">✅ Step 1 PASSED - Basic fetch works</p>';
+                
+            } catch (error) {
+                results.innerHTML += `<p style="color: red;">❌ Step 1 FAILED: ${error.message}</p>`;
+                console.error('Step 1 error:', error);
+            }
+        }
+
+        // Step 2: Add jsPDF library
+        async function testStep2() {
+            const results = document.getElementById('results');
+            results.innerHTML += '<h3>Step 2: With jsPDF Library</h3>';
+            
+            // Add jsPDF dynamically to see if it interferes
+            if (!window.jspdf) {
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+                document.head.appendChild(script);
+                
+                await new Promise((resolve) => {
+                    script.onload = resolve;
+                });
+            }
+            
+            try {
+                const response = await fetch('/api/pdf-proxy');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const arrayBuffer = await response.arrayBuffer();
+                const loadingTask = pdfjsLib.getDocument(arrayBuffer);
+                const pdf = await loadingTask.promise;
+                
+                results.innerHTML += '<p style="color: green;">✅ Step 2 PASSED - Works with jsPDF</p>';
+                
+            } catch (error) {
+                results.innerHTML += `<p style="color: red;">❌ Step 2 FAILED: ${error.message}</p>`;
+                console.error('Step 2 error:', error);
+            }
+        }
+
+        // Step 3: Add complex variables
+        async function testStep3() {
+            const results = document.getElementById('results');
+            results.innerHTML += '<h3>Step 3: With Complex Variables</h3>';
+            
+            try {
+                // Add the same variables as the failing version
+                const DEFAULT_PDF_URL = '/api/pdf-proxy';
+                let currentPdfUrl = null;
+                let currentPdfName = 'document';
+                let pdfDoc = null;
+                let currentPage = 1;
+                let totalPages = 0;
+                
+                currentPdfUrl = DEFAULT_PDF_URL;
+                currentPdfName = 'Test PDF';
+                
+                const response = await fetch(DEFAULT_PDF_URL);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const arrayBuffer = await response.arrayBuffer();
+                const loadingTask = pdfjsLib.getDocument(arrayBuffer);
+                pdfDoc = await loadingTask.promise;
+                totalPages = pdfDoc.numPages;
+                
+                results.innerHTML += '<p style="color: green;">✅ Step 3 PASSED - Works with complex variables</p>';
+                
+            } catch (error) {
+                results.innerHTML += `<p style="color: red;">❌ Step 3 FAILED: ${error.message}</p>`;
+                console.error('Step 3 error:', error);
+            }
+        }
+
+        // Step 4: Add input elements to DOM
+        async function testStep4() {
+            const results = document.getElementById('results');
+            results.innerHTML += '<h3>Step 4: With Input Elements</h3>';
+            
+            try {
+                // Add input elements like the failing version
+                if (!document.getElementById('pdf-file-input')) {
+                    const fileInput = document.createElement('input');
+                    fileInput.type = 'file';
+                    fileInput.id = 'pdf-file-input';
+                    fileInput.accept = '.pdf';
+                    document.body.appendChild(fileInput);
+                }
+                
+                if (!document.getElementById('pdf-url-input')) {
+                    const urlInput = document.createElement('input');
+                    urlInput.type = 'url';
+                    urlInput.id = 'pdf-url-input';
+                    urlInput.placeholder = 'https://example.com/document.pdf';
+                    document.body.appendChild(urlInput);
+                }
+                
+                // Try to access and clear them (like the failing version does)
+                const fileInput = document.getElementById('pdf-file-input');
+                const urlInput = document.getElementById('pdf-url-input');
+                
+                if (fileInput) fileInput.value = '';
+                if (urlInput) urlInput.value = '';
+                
+                // Now try the fetch
+                const response = await fetch('/api/pdf-proxy');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const arrayBuffer = await response.arrayBuffer();
+                const loadingTask = pdfjsLib.getDocument(arrayBuffer);
+                const pdf = await loadingTask.promise;
+                
+                results.innerHTML += '<p style="color: green;">✅ Step 4 PASSED - Works with input elements</p>';
+                
+            } catch (error) {
+                results.innerHTML += `<p style="color: red;">❌ Step 4 FAILED: ${error.message}</p>`;
+                console.error('Step 4 error:', error);
+            }
+        }
+
+        // Test if auto-execution causes the issue
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded - NOT auto-running any tests');
+        });
+    </script>
+</body>
+</html>

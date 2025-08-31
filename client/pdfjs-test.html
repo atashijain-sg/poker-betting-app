@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PDF.js Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+        .test { margin: 1rem 0; padding: 1rem; border: 1px solid #ccc; }
+        .success { background: #d4edda; }
+        .error { background: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h1>PDF.js Loading Test</h1>
+    <button onclick="runPDFTests()">🔄 Run PDF.js Tests</button>
+    
+    <div id="test1" class="test">
+        <h3>Test 1: PDF.js Library</h3>
+        <div id="result1">Click run to test</div>
+    </div>
+    
+    <div id="test2" class="test">
+        <h3>Test 2: Fetch PDF as ArrayBuffer</h3>
+        <div id="result2">Click run to test</div>
+    </div>
+    
+    <div id="test3" class="test">
+        <h3>Test 3: Load PDF with PDF.js</h3>
+        <div id="result3">Click run to test</div>
+    </div>
+    
+    <script>
+        // Setup PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        async function test1() {
+            const result = document.getElementById('result1');
+            const test = document.getElementById('test1');
+            
+            try {
+                result.textContent = 'Checking PDF.js library...';
+                
+                if (typeof pdfjsLib === 'undefined') {
+                    throw new Error('PDF.js library not loaded');
+                }
+                
+                result.textContent = `✅ SUCCESS: PDF.js version ${pdfjsLib.version}`;
+                test.className = 'test success';
+            } catch (error) {
+                result.textContent = `❌ FAILED: ${error.message}`;
+                test.className = 'test error';
+            }
+        }
+        
+        async function test2() {
+            const result = document.getElementById('result2');
+            const test = document.getElementById('test2');
+            
+            try {
+                result.textContent = 'Fetching PDF as ArrayBuffer...';
+                
+                const response = await fetch('/api/pdf-proxy');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const arrayBuffer = await response.arrayBuffer();
+                
+                result.textContent = `✅ SUCCESS: Got ArrayBuffer with ${arrayBuffer.byteLength} bytes`;
+                test.className = 'test success';
+                
+                // Store for next test
+                window.pdfArrayBuffer = arrayBuffer;
+                
+            } catch (error) {
+                result.textContent = `❌ FAILED: ${error.message}`;
+                test.className = 'test error';
+            }
+        }
+        
+        async function test3() {
+            const result = document.getElementById('result3');
+            const test = document.getElementById('test3');
+            
+            try {
+                result.textContent = 'Loading PDF with PDF.js...';
+                
+                if (!window.pdfArrayBuffer) {
+                    throw new Error('No PDF data from previous test');
+                }
+                
+                const loadingTask = pdfjsLib.getDocument(window.pdfArrayBuffer);
+                const pdf = await loadingTask.promise;
+                
+                result.textContent = `✅ SUCCESS: PDF loaded with ${pdf.numPages} pages`;
+                test.className = 'test success';
+                
+                // Test rendering first page
+                const page = await pdf.getPage(1);
+                const viewport = page.getViewport({ scale: 1.0 });
+                
+                result.textContent += ` | First page: ${viewport.width}x${viewport.height}`;
+                
+            } catch (error) {
+                result.textContent = `❌ FAILED: ${error.message}`;
+                test.className = 'test error';
+                console.error('PDF.js error details:', error);
+            }
+        }
+        
+        async function runPDFTests() {
+            await test1();
+            if (document.getElementById('test1').className.includes('success')) {
+                await test2();
+                if (document.getElementById('test2').className.includes('success')) {
+                    await test3();
+                }
+            }
+        }
+        
+        // Auto-run tests
+        runPDFTests();
+    </script>
+</body>
+</html>

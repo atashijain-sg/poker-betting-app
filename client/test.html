@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Server Test</title>
+</head>
+<body>
+    <h1>Server Connectivity Test</h1>
+    <div id="results"></div>
+    
+    <script>
+        async function testConnectivity() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<p>Testing server connectivity...</p>';
+            
+            try {
+                // Test health endpoint
+                const healthResponse = await fetch('/api/health');
+                const healthData = await healthResponse.json();
+                results.innerHTML += `<p>✅ Health check: ${JSON.stringify(healthData)}</p>`;
+                
+                // Test PDF endpoint
+                const pdfResponse = await fetch('/api/pdf-proxy', { method: 'HEAD' });
+                results.innerHTML += `<p>✅ PDF endpoint: Status ${pdfResponse.status}</p>`;
+                
+                results.innerHTML += `<p><strong>✅ Server is working! You can access the PDF notebook at:</strong></p>`;
+                results.innerHTML += `<p><a href="/pdf-notebook" target="_blank">http://localhost:3001/pdf-notebook</a></p>`;
+                
+            } catch (error) {
+                results.innerHTML += `<p style="color: red;">❌ Error: ${error.message}</p>`;
+                results.innerHTML += `<p>Make sure you're accessing: <strong>http://localhost:3001/test.html</strong></p>`;
+            }
+        }
+        
+        // Run test on page load
+        testConnectivity();
+    </script>
+</body>
+</html>

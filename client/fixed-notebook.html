@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fixed PDF Notebook</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <!-- Same CSS as before -->
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Georgia', serif; background: #f5f5f0; color: #333; }
+        .header { background: #2c3e50; color: white; padding: 1rem; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .container { max-width: 1600px; margin: 0 auto; padding: 2rem; }
+        .notebook-page { display: flex; margin-bottom: 3rem; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; min-height: 800px; }
+        .pdf-side { flex: 1; padding: 2rem; border-right: 3px solid #e74c3c; position: relative; }
+        .pdf-container { position: relative; display: inline-block; }
+        .pdf-canvas { max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px; display: block; }
+        .annotation-canvas { position: absolute; top: 0; left: 0; cursor: crosshair; border: 1px solid #ddd; border-radius: 4px; }
+        .annotation-tools { margin-bottom: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 5px; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+        .tool-btn { padding: 0.5rem 1rem; border: 2px solid #ddd; background: white; border-radius: 5px; cursor: pointer; font-size: 0.9rem; }
+        .tool-btn.active { background: #3498db; color: white; border-color: #3498db; }
+        .tool-btn:hover { border-color: #3498db; }
+        .color-picker { width: 40px; height: 30px; border: 2px solid #ddd; border-radius: 5px; cursor: pointer; }
+        .notes-side { flex: 1; padding: 2rem; background: linear-gradient(to right, #fff 0%, #fff 40px, #e8f4fd 40px, #e8f4fd 42px, #fff 42px); position: relative; }
+        .notes-side::before { content: ''; position: absolute; left: 40px; top: 0; bottom: 0; width: 2px; background: #ff69b4; }
+        .page-number { position: absolute; top: 1rem; right: 1rem; background: #3498db; color: white; padding: 0.5rem 1rem; border-radius: 20px; font-weight: bold; font-size: 0.9rem; }
+        .notes-textarea { width: 100%; height: 700px; border: none; background: transparent; font-family: 'Georgia', serif; font-size: 1rem; line-height: 1.6; padding: 1rem 1rem 1rem 50px; resize: none; outline: none; background-image: repeating-linear-gradient(transparent, transparent 25px, #e0e0e0 25px, #e0e0e0 26px); }
+        .notes-textarea::placeholder { color: #999; font-style: italic; }
+        .loading { text-align: center; padding: 3rem; font-size: 1.2rem; color: #666; }
+        .controls { text-align: center; margin-bottom: 2rem; }
+        .btn { background: #3498db; color: white; border: none; padding: 0.8rem 1.5rem; margin: 0 0.5rem; border-radius: 5px; cursor: pointer; font-size: 1rem; }
+        .btn:hover { background: #2980b9; }
+        .btn:disabled { background: #bdc3c7; cursor: not-allowed; }
+        @media (max-width: 768px) { .notebook-page { flex-direction: column; } .pdf-side { border-right: none; border-bottom: 3px solid #e74c3c; } .notes-textarea { height: 400px; } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📖 PDF Notebook</h1>
+        <p id="pdf-title">Universal PDF Annotation Tool</p>
+    </div>
+
+    <div class="container">
+        <div class="pdf-source-controls" style="background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 2rem;">
+            <h3 style="margin-bottom: 1rem; color: #2c3e50;">📁 Load PDF</h3>
+            
+            <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem;">
+                <div style="flex: 1; min-width: 300px;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Upload PDF File:</label>
+                    <input type="file" id="pdf-file-input" accept=".pdf" style="width: 100%; padding: 0.5rem; border: 2px solid #ddd; border-radius: 5px;">
+                </div>
+                
+                <div style="flex: 1; min-width: 300px;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Or PDF URL:</label>
+                    <input type="url" id="pdf-url-input" placeholder="https://example.com/document.pdf" style="width: 100%; padding: 0.5rem; border: 2px solid #ddd; border-radius: 5px;">
+                </div>
+                
+                <button class="btn" onclick="loadCustomPDF()">📖 Load PDF</button>
+            </div>
+            
+
+        </div>
+
+        <div class="controls">
+            <button class="btn" onclick="downloadOriginalPDF()">📥 Download Original PDF</button>
+            <button class="btn" onclick="downloadAnnotatedPDF()">📑 Download with Notes & Annotations</button>
+            <button class="btn" onclick="saveAllNotes()">💾 Save All Notes</button>
+            <button class="btn" onclick="exportNotes()">📄 Export Notes</button>
+            <button class="btn" onclick="clearAllNotes()">🗑️ Clear All Notes</button>
+        </div>
+
+        <div id="loading" class="loading" style="display: none;">Loading PDF pages... Please wait.</div>
+        <div id="pages-container"></div>
+    </div>
+
+    <script>
+        // Setup
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        const DEFAULT_PDF_URL = '/api/pdf-proxy';
+        let currentPdfUrl = null;
+        let currentPdfName = 'document';
+        let pdfDoc = null;
+        let currentPage = 1;
+        let totalPages = 0;
+
+        // SIMPLIFIED auto-loading function (no input field access)
+        async function autoLoadDefaultPDF() {
+            console.log('Auto-loading default PDF...');
+            await loadPDF(DEFAULT_PDF_URL, 'Is Populism Necessarily Bad Economics - Dani Rodrik');
+        }
+
+        // User-triggered default loading (with input field clearing)
+        async function loadDefaultPDF() {
+            console.log('User clicked Load Default PDF');
+            
+            // Only clear inputs when user explicitly clicks the button
+            try {
+                const fileInput = document.getElementById('pdf-file-input');
+                const urlInput = document.getElementById('pdf-url-input');
+                if (fileInput) fileInput.value = '';
+                if (urlInput) urlInput.value = '';
+            } catch (error) {
+                console.warn('Could not clear inputs:', error);
+            }
+            
+            await loadPDF(DEFAULT_PDF_URL, 'Is Populism Necessarily Bad Economics - Dani Rodrik');
+        }
+
+        // Custom PDF loading
+        async function loadCustomPDF() {
+            const fileInput = document.getElementById('pdf-file-input');
+            const urlInput = document.getElementById('pdf-url-input');
+            
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                const fileUrl = URL.createObjectURL(file);
+                const fileName = file.name.replace('.pdf', '');
+                await loadPDF(fileUrl, fileName);
+                urlInput.value = '';
+            } else if (urlInput.value.trim()) {
+                const url = urlInput.value.trim();
+                const fileName = url.split('/').pop().replace('.pdf', '') || 'Remote PDF';
+                try {
+                    // Use server proxy for external URLs to avoid CORS
+                    const proxyUrl = `/api/external-pdf-proxy?url=${encodeURIComponent(url)}`;
+                    await loadPDF(proxyUrl, fileName);
+                    fileInput.value = '';
+                } catch (error) {
+                    alert(`Error loading PDF from URL: ${error.message}`);
+                }
+            } else {
+                alert('Please select a file or enter a URL.');
+            }
+        }
+
+        // Core PDF loading function (same working version)
+        async function loadPDF(pdfSource, pdfName = 'document') {
+            try {
+                console.log('Starting PDF load...', pdfSource);
+                
+                document.getElementById('pages-container').innerHTML = '';
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('loading').textContent = 'Fetching PDF...';
+                
+                currentPdfUrl = pdfSource;
+                currentPdfName = pdfName;
+                
+                const response = await fetch(pdfSource);
+                console.log('Fetch response:', response.status, response.statusText);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const arrayBuffer = await response.arrayBuffer();
+                console.log('ArrayBuffer size:', arrayBuffer.byteLength);
+                
+                const loadingTask = pdfjsLib.getDocument(arrayBuffer);
+                pdfDoc = await loadingTask.promise;
+                totalPages = pdfDoc.numPages;
+                
+                console.log('PDF loaded successfully, pages:', totalPages);
+                
+                document.getElementById('pdf-title').textContent = `${pdfName} (${totalPages} pages)`;
+                
+                for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                    await renderPage(pageNum);
+                    document.getElementById('loading').textContent = `Rendering page ${pageNum}/${totalPages}...`;
+                }
+                
+                document.getElementById('loading').style.display = 'none';
+                loadNotes();
+                
+            } catch (error) {
+                console.error('PDF loading error:', error);
+                document.getElementById('loading').innerHTML = `
+                    <div style="color: red;">
+                        <h3>❌ Error Loading PDF</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <p><strong>Type:</strong> ${error.name}</p>
+                        <button class="btn" onclick="loadDefaultPDF()">🔄 Retry</button>
+                    </div>
+                `;
+            }
+        }
+
+        async function renderPage(pageNum) {
+            const page = await pdfDoc.getPage(pageNum);
+            const scale = 1.2;
+            const viewport = page.getViewport({ scale });
+
+            const notebookPage = document.createElement('div');
+            notebookPage.className = 'notebook-page';
+            notebookPage.innerHTML = `
+                <div class="pdf-side">
+                    <div class="page-number">Page ${pageNum}</div>
+                    <div class="annotation-tools">
+                        <button class="tool-btn active">✏️ Pen</button>
+                        <button class="tool-btn">🖍️ Highlight</button>
+                        <button class="tool-btn">〰️ Underline</button>
+                        <input type="color" class="color-picker" value="#ffff00">
+                        <button class="tool-btn">🗑️ Clear</button>
+                    </div>
+                    <div class="pdf-container">
+                        <canvas class="pdf-canvas" id="canvas-${pageNum}"></canvas>
+                        <canvas class="annotation-canvas" id="annotation-${pageNum}"></canvas>
+                    </div>
+                </div>
+                <div class="notes-side">
+                    <textarea 
+                        class="notes-textarea" 
+                        id="notes-${pageNum}"
+                        placeholder="Write your notes for page ${pageNum} here..."
+                        oninput="saveNote(${pageNum})"
+                    ></textarea>
+                </div>
+            `;
+
+            document.getElementById('pages-container').appendChild(notebookPage);
+
+            const canvas = document.getElementById(`canvas-${pageNum}`);
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+
+            await page.render({ canvasContext: context, viewport: viewport }).promise;
+            
+            const annotationCanvas = document.getElementById(`annotation-${pageNum}`);
+            annotationCanvas.width = canvas.width;
+            annotationCanvas.height = canvas.height;
+        }
+
+        // Notes management
+        function getPdfKey() {
+            return currentPdfName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+        }
+
+        function saveNote(pageNum) {
+            const noteText = document.getElementById(`notes-${pageNum}`).value;
+            const pdfKey = getPdfKey();
+            localStorage.setItem(`${pdfKey}_note_page_${pageNum}`, noteText);
+        }
+
+        function loadNotes() {
+            const pdfKey = getPdfKey();
+            for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                const savedNote = localStorage.getItem(`${pdfKey}_note_page_${pageNum}`);
+                if (savedNote) {
+                    const textarea = document.getElementById(`notes-${pageNum}`);
+                    if (textarea) textarea.value = savedNote;
+                }
+            }
+        }
+
+        function saveAllNotes() {
+            let noteCount = 0;
+            for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                const textarea = document.getElementById(`notes-${pageNum}`);
+                if (textarea && textarea.value.trim()) {
+                    saveNote(pageNum);
+                    noteCount++;
+                }
+            }
+            alert(`Saved notes for ${noteCount} pages!`);
+        }
+
+        function exportNotes() {
+            let allNotes = `# Notes: ${currentPdfName}\n\n`;
+            
+            for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                const textarea = document.getElementById(`notes-${pageNum}`);
+                if (textarea && textarea.value.trim()) {
+                    allNotes += `## Page ${pageNum}\n\n${textarea.value}\n\n---\n\n`;
+                }
+            }
+            
+            const blob = new Blob([allNotes], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${currentPdfName.replace(/[^a-zA-Z0-9]/g, '_')}_notes.md`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function clearAllNotes() {
+            if (confirm('Are you sure you want to clear all notes? This cannot be undone.')) {
+                const pdfKey = getPdfKey();
+                for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                    localStorage.removeItem(`${pdfKey}_note_page_${pageNum}`);
+                    const textarea = document.getElementById(`notes-${pageNum}`);
+                    if (textarea) textarea.value = '';
+                }
+                alert('All notes cleared!');
+            }
+        }
+
+        function downloadOriginalPDF() {
+            if (!currentPdfUrl) {
+                alert('No PDF loaded');
+                return;
+            }
+            const link = document.createElement('a');
+            link.href = currentPdfUrl;
+            link.download = `${currentPdfName}_original.pdf`;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function downloadAnnotatedPDF() {
+            alert('Annotated PDF download feature coming soon!');
+        }
+
+        // Ready when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('PDF Notebook ready - please upload a file or enter a URL');
+        });
+    </script>
+</body>
+</html>

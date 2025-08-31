@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Fetch Test</title>
+</head>
+<body>
+    <h1>Direct Fetch Test</h1>
+    <button onclick="testFetch()">Test Same Fetch Call</button>
+    <div id="result"></div>
+    
+    <script>
+        async function testFetch() {
+            const result = document.getElementById('result');
+            result.innerHTML = 'Testing...';
+            
+            try {
+                console.log('Starting fetch test...');
+                
+                // Exact same fetch call as in the main app
+                const response = await fetch('/api/pdf-proxy');
+                console.log('Fetch response:', response.status, response.statusText);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const arrayBuffer = await response.arrayBuffer();
+                console.log('ArrayBuffer size:', arrayBuffer.byteLength);
+                
+                result.innerHTML = `
+                    <div style="color: green;">
+                        <h3>✅ SUCCESS</h3>
+                        <p>Status: ${response.status}</p>
+                        <p>Size: ${arrayBuffer.byteLength} bytes</p>
+                    </div>
+                `;
+                
+            } catch (error) {
+                console.error('Fetch error:', error);
+                result.innerHTML = `
+                    <div style="color: red;">
+                        <h3>❌ FAILED</h3>
+                        <p>Error: ${error.message}</p>
+                        <p>Type: ${error.name}</p>
+                        <p>Stack: ${error.stack}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // Auto-run test
+        testFetch();
+    </script>
+</body>
+</html>

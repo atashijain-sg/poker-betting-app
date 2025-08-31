@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSM Health Dashboard - Vitally Integration</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .status-bar {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .status-item {
+            color: white;
+            text-align: center;
+        }
+
+        .status-item h3 {
+            font-size: 1rem;
+            margin-bottom: 5px;
+            opacity: 0.8;
+        }
+
+        .status-item .value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .controls {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .controls label {
+            color: white;
+            font-weight: 500;
+        }
+
+        .controls select, .controls button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 8px;
+            background: white;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .controls button {
+            background: #4CAF50;
+            color: white;
+            font-weight: 500;
+        }
+
+        .controls button:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+        }
+
+        .health-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .health-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .health-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .health-card.healthy {
+            border-left: 5px solid #4CAF50;
+        }
+
+        .health-card.concerning {
+            border-left: 5px solid #FF9800;
+        }
+
+        .health-card.poor {
+            border-left: 5px solid #f44336;
+        }
+
+        .health-card.unknown {
+            border-left: 5px solid #9E9E9E;
+        }
+
+        .health-card h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+
+        .health-card .count {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .health-card.healthy .count { color: #4CAF50; }
+        .health-card.concerning .count { color: #FF9800; }
+        .health-card.poor .count { color: #f44336; }
+        .health-card.unknown .count { color: #9E9E9E; }
+
+        .accounts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        .account-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .account-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .account-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .account-name {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .health-badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .health-badge.healthy {
+            background: #E8F5E8;
+            color: #4CAF50;
+        }
+
+        .health-badge.concerning {
+            background: #FFF3E0;
+            color: #FF9800;
+        }
+
+        .health-badge.poor {
+            background: #FFEBEE;
+            color: #f44336;
+        }
+
+        .health-badge.unknown {
+            background: #F5F5F5;
+            color: #9E9E9E;
+        }
+
+        .health-score {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        .recommendations {
+            margin-top: 15px;
+        }
+
+        .recommendation {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+
+        .recommendation.high {
+            border-left: 4px solid #f44336;
+        }
+
+        .recommendation.medium {
+            border-left: 4px solid #FF9800;
+        }
+
+        .recommendation.low {
+            border-left: 4px solid #4CAF50;
+        }
+
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.2rem;
+            padding: 50px;
+        }
+
+        .error {
+            background: rgba(244, 67, 54, 0.9);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .no-data {
+            text-align: center;
+            color: white;
+            font-size: 1.1rem;
+            padding: 50px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .status-bar {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .accounts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>CSM Health Dashboard</h1>
+            <p>Customer Success Management powered by Vitally data</p>
+        </div>
+
+        <div class="status-bar" id="statusBar">
+            <div class="status-item">
+                <h3>Service Status</h3>
+                <div class="value" id="serviceStatus">Checking...</div>
+            </div>
+            <div class="status-item">
+                <h3>Total Accounts</h3>
+                <div class="value" id="totalAccounts">-</div>
+            </div>
+            <div class="status-item">
+                <h3>Analysis Period</h3>
+                <div class="value" id="analysisPeriod">-</div>
+            </div>
+            <div class="status-item">
+                <h3>Last Updated</h3>
+                <div class="value" id="lastUpdated">-</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <label for="daysSelect">Analysis Period:</label>
+            <select id="daysSelect">
+                <option value="7">Last 7 days</option>
+                <option value="14">Last 14 days</option>
+                <option value="30" selected>Last 30 days</option>
+                <option value="60">Last 60 days</option>
+                <option value="90">Last 90 days</option>
+            </select>
+            
+            <label for="limitSelect">Max Accounts:</label>
+            <select id="limitSelect">
+                <option value="10">10 accounts</option>
+                <option value="25" selected>25 accounts</option>
+                <option value="50">50 accounts</option>
+                <option value="100">100 accounts</option>
+            </select>
+            
+            <button onclick="refreshDashboard()">Refresh Data</button>
+        </div>
+
+        <div id="content">
+            <div class="loading">Loading health dashboard...</div>
+        </div>
+    </div>
+
+    <script>
+        let currentData = null;
+
+        async function checkVitallyStatus() {
+            try {
+                const response = await fetch('/api/vitally/status');
+                const data = await response.json();
+                
+                const statusElement = document.getElementById('serviceStatus');
+                if (data.enabled) {
+                    statusElement.textContent = 'Active';
+                    statusElement.style.color = '#4CAF50';
+                } else {
+                    statusElement.textContent = 'Disabled';
+                    statusElement.style.color = '#f44336';
+                    showError('Vitally service is not configured. Please set VITALLY_API_KEY environment variable.');
+                    return false;
+                }
+                return true;
+            } catch (error) {
+                console.error('Status check failed:', error);
+                document.getElementById('serviceStatus').textContent = 'Error';
+                showError('Failed to check service status');
+                return false;
+            }
+        }
+
+        async function loadHealthDashboard() {
+            const days = document.getElementById('daysSelect').value;
+            const limit = document.getElementById('limitSelect').value;
+            
+            try {
+                const response = await fetch(`/api/vitally/health-dashboard?days=${days}&limit=${limit}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                currentData = data;
+                displayHealthDashboard(data);
+                
+            } catch (error) {
+                console.error('Failed to load health dashboard:', error);
+                showError('Failed to load health dashboard: ' + error.message);
+            }
+        }
+
+        function displayHealthDashboard(data) {
+            // Update status bar
+            document.getElementById('totalAccounts').textContent = data.totalAccounts;
+            document.getElementById('analysisPeriod').textContent = `${data.period.days} days`;
+            document.getElementById('lastUpdated').textContent = new Date(data.lastUpdated).toLocaleTimeString();
+
+            // Create health summary cards
+            const healthSummaryHtml = `
+                <div class="health-summary">
+                    <div class="health-card healthy">
+                        <h3>Healthy</h3>
+                        <div class="count">${data.healthSummary.healthy}</div>
+                        <p>Accounts performing well</p>
+                    </div>
+                    <div class="health-card concerning">
+                        <h3>Concerning</h3>
+                        <div class="count">${data.healthSummary.concerning}</div>
+                        <p>Accounts needing attention</p>
+                    </div>
+                    <div class="health-card poor">
+                        <h3>Poor</h3>
+                        <div class="count">${data.healthSummary.poor}</div>
+                        <p>Accounts at risk</p>
+                    </div>
+                    <div class="health-card unknown">
+                        <h3>Unknown</h3>
+                        <div class="count">${data.healthSummary.unknown}</div>
+                        <p>Accounts with errors</p>
+                    </div>
+                </div>
+            `;
+
+            // Create account cards
+            const accountsHtml = data.accounts.map(account => {
+                if (account.error) {
+                    return `
+                        <div class="account-card">
+                            <div class="account-header">
+                                <div class="account-name">${account.accountName || account.accountId}</div>
+                                <div class="health-badge unknown">Error</div>
+                            </div>
+                            <div style="color: #f44336; font-size: 0.9rem;">
+                                ${account.error}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                const recommendations = account.recommendations || [];
+                const highPriorityRecs = recommendations.filter(r => r.priority === 'high');
+                
+                return `
+                    <div class="account-card">
+                        <div class="account-header">
+                            <div class="account-name">${account.accountName}</div>
+                            <div class="health-badge ${account.healthRating}">${account.healthRating}</div>
+                        </div>
+                        
+                        <div class="health-score" style="color: ${getScoreColor(account.healthScore)}">
+                            Score: ${account.healthScore !== null ? account.healthScore.toFixed(2) : 'N/A'}
+                        </div>
+                        
+                        ${recommendations.length > 0 ? `
+                            <div class="recommendations">
+                                <strong>Recommendations:</strong>
+                                ${recommendations.slice(0, 3).map(rec => `
+                                    <div class="recommendation ${rec.priority}">
+                                        <strong>${rec.category}:</strong> ${rec.message}
+                                    </div>
+                                `).join('')}
+                                ${recommendations.length > 3 ? `
+                                    <div style="font-size: 0.8rem; color: #666; margin-top: 5px;">
+                                        +${recommendations.length - 3} more recommendations
+                                    </div>
+                                ` : ''}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('content').innerHTML = `
+                ${healthSummaryHtml}
+                <div class="accounts-grid">
+                    ${accountsHtml}
+                </div>
+            `;
+        }
+
+        function getScoreColor(score) {
+            if (score === null) return '#9E9E9E';
+            if (score > 0.2) return '#4CAF50';
+            if (score < -0.2) return '#f44336';
+            return '#FF9800';
+        }
+
+        function showError(message) {
+            document.getElementById('content').innerHTML = `
+                <div class="error">
+                    <h3>Error</h3>
+                    <p>${message}</p>
+                    <button onclick="refreshDashboard()" style="margin-top: 15px; padding: 10px 20px; border: none; background: white; color: #f44336; border-radius: 5px; cursor: pointer;">
+                        Try Again
+                    </button>
+                </div>
+            `;
+        }
+
+        async function refreshDashboard() {
+            document.getElementById('content').innerHTML = '<div class="loading">Refreshing dashboard...</div>';
+            
+            const isServiceAvailable = await checkVitallyStatus();
+            if (isServiceAvailable) {
+                await loadHealthDashboard();
+            }
+        }
+
+        // Event listeners
+        document.getElementById('daysSelect').addEventListener('change', refreshDashboard);
+        document.getElementById('limitSelect').addEventListener('change', refreshDashboard);
+
+        // Initialize dashboard
+        window.addEventListener('load', refreshDashboard);
+    </script>
+</body>
+</html>

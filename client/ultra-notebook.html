@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Studio - Ultra Modern PDF Annotation Tool</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome for amazing icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --secondary: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --accent: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            --dark: #0f0f23;
+            --dark-alt: #1a1a2e;
+            --dark-card: #16213e;
+            --light: #ffffff;
+            --text-primary: #2d3748;
+            --text-secondary: #718096;
+            --text-dark: #e2e8f0;
+            --border: rgba(255, 255, 255, 0.1);
+            --shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            --blur: backdrop-filter: blur(20px);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--dark);
+            color: var(--text-dark);
+            overflow-x: hidden;
+            transition: all 0.3s ease;
+        }
+
+        /* Animated background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(120, 200, 255, 0.2) 0%, transparent 50%);
+            z-index: -1;
+            animation: bgShift 20s ease-in-out infinite;
+        }
+
+        @keyframes bgShift {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            50% { transform: scale(1.1) rotate(1deg); }
+        }
+
+        /* Header */
+        .header {
+            background: rgba(15, 15, 35, 0.9);
+            var(--blur);
+            border-bottom: 1px solid var(--border);
+            padding: 1.5rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(20px);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 2rem;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            font-size: 1.8rem;
+            font-weight: 800;
+            background: var(--primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .logo i {
+            background: var(--accent);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 2rem;
+        }
+
+        .theme-toggle {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--border);
+            border-radius: 50px;
+            padding: 0.5rem 1rem;
+            color: var(--text-dark);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .theme-toggle:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        /* Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 3rem 2rem;
+        }
+
+        /* Upload Section */
+        .upload-section {
+            background: rgba(22, 33, 62, 0.6);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 3rem;
+            margin-bottom: 3rem;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(20px);
+            box-shadow: var(--shadow);
+        }
+
+        .upload-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: var(--accent);
+        }
+
+        .upload-title {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .upload-title h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: var(--primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+
+        .upload-title p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .upload-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .upload-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px dashed rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-card:hover {
+            border-color: rgba(102, 126, 234, 0.5);
+            background: rgba(102, 126, 234, 0.1);
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .upload-card i {
+            font-size: 3rem;
+            background: var(--accent);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1rem;
+        }
+
+        .upload-input {
+            width: 100%;
+            padding: 1rem;
+            border: none;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-dark);
+            font-size: 1rem;
+            margin-top: 1rem;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .upload-input:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.5);
+        }
+
+        .upload-input::placeholder {
+            color: rgba(226, 232, 240, 0.6);
+        }
+
+        .btn {
+            background: var(--primary);
+            border: none;
+            border-radius: 12px;
+            padding: 1rem 2rem;
+            color: white;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .btn:hover::before {
+            left: 100%;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-load {
+            background: var(--secondary);
+            margin-top: 1rem;
+            width: 100%;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 3rem;
+            flex-wrap: wrap;
+        }
+
+        .btn-control {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--border);
+            color: var(--text-dark);
+            padding: 0.8rem 1.5rem;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .btn-control:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 4rem 2rem;
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 3px solid rgba(102, 126, 234, 0.3);
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Notebook Pages */
+        .notebook-page {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 4rem;
+            background: rgba(22, 33, 62, 0.6);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(20px);
+            min-height: 800px;
+        }
+
+        .pdf-side {
+            padding: 2rem;
+            position: relative;
+        }
+
+        .pdf-side::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 10%;
+            bottom: 10%;
+            width: 1px;
+            background: var(--accent);
+        }
+
+        .notes-side {
+            padding: 2rem;
+            background: 
+                linear-gradient(to right, 
+                    transparent 0%, 
+                    transparent 40px, 
+                    rgba(245, 87, 108, 0.1) 40px, 
+                    rgba(245, 87, 108, 0.1) 42px, 
+                    transparent 42px
+                );
+            position: relative;
+        }
+
+        .notes-side::before {
+            content: '';
+            position: absolute;
+            left: 40px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: var(--secondary);
+        }
+
+        .page-number {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: var(--accent);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .annotation-tools {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            flex-wrap: wrap;
+            align-items: center;
+            border: 1px solid var(--border);
+        }
+
+        .tool-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 0.7rem 1rem;
+            color: var(--text-dark);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .tool-btn.active {
+            background: var(--accent);
+            color: white;
+            box-shadow: var(--shadow);
+        }
+
+        .tool-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .color-picker {
+            width: 40px;
+            height: 36px;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            cursor: pointer;
+            background: none;
+        }
+
+        .pdf-container {
+            position: relative;
+            display: inline-block;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+
+        .pdf-canvas {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            border-radius: 12px;
+        }
+
+        .annotation-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: crosshair;
+            border-radius: 12px;
+        }
+
+        .notes-textarea {
+            width: 100%;
+            height: 600px;
+            border: none;
+            background: transparent;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1rem;
+            line-height: 1.8;
+            padding: 1rem 1rem 1rem 50px;
+            resize: none;
+            outline: none;
+            color: var(--text-dark);
+            background-image: 
+                repeating-linear-gradient(
+                    transparent,
+                    transparent 27px,
+                    rgba(255, 255, 255, 0.1) 27px,
+                    rgba(255, 255, 255, 0.1) 28px
+                );
+        }
+
+        .notes-textarea::placeholder {
+            color: rgba(226, 232, 240, 0.5);
+            font-style: italic;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .upload-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .notebook-page {
+                grid-template-columns: 1fr;
+            }
+            
+            .pdf-side::after {
+                display: none;
+            }
+            
+            .controls {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 2rem 1rem;
+            }
+            
+            .upload-section {
+                padding: 2rem;
+            }
+            
+            .upload-title h2 {
+                font-size: 2rem;
+            }
+            
+            .notebook-page {
+                margin-bottom: 2rem;
+            }
+            
+            .notes-textarea {
+                height: 400px;
+            }
+        }
+
+        /* Success/Error states */
+        .success {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem;
+            border-radius: 12px;
+            margin: 1rem 0;
+            text-align: center;
+        }
+
+        .error {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 1rem;
+            border-radius: 12px;
+            margin: 1rem 0;
+            text-align: center;
+        }
+
+        /* Animations */
+        .fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { 
+                opacity: 0; 
+                transform: translateY(30px); 
+            }
+            to { 
+                opacity: 1; 
+                transform: translateY(0); 
+            }
+        }
+
+        .slide-up {
+            animation: slideUp 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(100px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <i class="fas fa-file-pdf"></i>
+                <span>PDF Studio</span>
+            </div>
+            <button class="theme-toggle" onclick="toggleTheme()">
+                <i class="fas fa-palette"></i>
+                <span>Theme</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Upload Section -->
+        <div class="upload-section fade-in">
+            <div class="upload-title">
+                <h2>Transform Your PDFs</h2>
+                <p>Upload, annotate, and take notes like never before</p>
+            </div>
+            
+            <div class="upload-grid">
+                <div class="upload-card">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <h3>Upload PDF File</h3>
+                    <p>Drag & drop or click to select</p>
+                    <input type="file" id="pdf-file-input" accept=".pdf" class="upload-input">
+                </div>
+                
+                <div class="upload-card">
+                    <i class="fas fa-link"></i>
+                    <h3>Load from URL</h3>
+                    <p>Paste any PDF link</p>
+                    <input type="url" id="pdf-url-input" placeholder="https://example.com/document.pdf" class="upload-input">
+                </div>
+            </div>
+            
+            <div style="text-align: center;">
+                <button class="btn btn-load" onclick="loadCustomPDF()">
+                    <i class="fas fa-rocket"></i>
+                    Load PDF
+                </button>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls">
+            <button class="btn btn-control" onclick="downloadOriginalPDF()">
+                <i class="fas fa-download"></i> Download Original
+            </button>
+            <button class="btn btn-control" onclick="downloadAnnotatedPDF()">
+                <i class="fas fa-file-export"></i> Export Annotated
+            </button>
+            <button class="btn btn-control" onclick="saveAllNotes()">
+                <i class="fas fa-save"></i> Save Notes
+            </button>
+            <button class="btn btn-control" onclick="exportNotes()">
+                <i class="fas fa-file-alt"></i> Export Notes
+            </button>
+            <button class="btn btn-control" onclick="clearAllNotes()">
+                <i class="fas fa-trash"></i> Clear All
+            </button>
+        </div>
+
+        <!-- Loading -->
+        <div id="loading" class="loading" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>Processing your PDF...</p>
+        </div>
+
+        <!-- Pages Container -->
+        <div id="pages-container"></div>
+    </div>
+
+    <script>
+        // Setup
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        let currentPdfUrl = null;
+        let currentPdfName = 'document';
+        let pdfDoc = null;
+        let currentPage = 1;
+        let totalPages = 0;
+
+        // Theme toggle
+        function toggleTheme() {
+            // This is a placeholder - you could implement light/dark theme switching
+            alert('Theme customization coming soon! 🎨');
+        }
+
+        // Custom PDF loading
+        async function loadCustomPDF() {
+            const fileInput = document.getElementById('pdf-file-input');
+            const urlInput = document.getElementById('pdf-url-input');
+            
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                const fileUrl = URL.createObjectURL(file);
+                const fileName = file.name.replace('.pdf', '');
+                await loadPDF(fileUrl, fileName);
+                urlInput.value = '';
+            } else if (urlInput.value.trim()) {
+                const url = urlInput.value.trim();
+                const fileName = url.split('/').pop().replace('.pdf', '') || 'Remote PDF';
+                try {
+                    const proxyUrl = `/api/external-pdf-proxy?url=${encodeURIComponent(url)}`;
+                    await loadPDF(proxyUrl, fileName);
+                    fileInput.value = '';
+                } catch (error) {
+                    showError(`Error loading PDF from URL: ${error.message}`);
+                }
+            } else {
+                showError('Please select a file or enter a URL.');
+            }
+        }
+
+        // Core PDF loading function
+        async function loadPDF(pdfSource, pdfName = 'document') {
+            try {
+                console.log('Starting PDF load...', pdfSource);
+                
+                document.getElementById('pages-container').innerHTML = '';
+                showLoading('Fetching PDF...');
+                
+                currentPdfUrl = pdfSource;
+                currentPdfName = pdfName;
+                
+                const response = await fetch(pdfSource);
+                console.log('Fetch response:', response.status, response.statusText);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                showLoading('Processing PDF...');
+                const arrayBuffer = await response.arrayBuffer();
+                console.log('ArrayBuffer size:', arrayBuffer.byteLength);
+                
+                const loadingTask = pdfjsLib.getDocument(arrayBuffer);
+                pdfDoc = await loadingTask.promise;
+                totalPages = pdfDoc.numPages;
+                
+                console.log('PDF loaded successfully, pages:', totalPages);
+                
+                showLoading('Rendering pages...');
+                
+                for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                    await renderPage(pageNum);
+                    showLoading(`Rendering page ${pageNum}/${totalPages}...`);
+                }
+                
+                hideLoading();
+                showSuccess(`Successfully loaded "${pdfName}" with ${totalPages} pages!`);
+                loadNotes();
+                
+            } catch (error) {
+                console.error('PDF loading error:', error);
+                hideLoading();
+                showError(`Error loading PDF: ${error.message}`);
+            }
+        }
+
+        async function renderPage(pageNum) {
+            const page = await pdfDoc.getPage(pageNum);
+            const scale = 1.2;
+            const viewport = page.getViewport({ scale });
+
+            const notebookPage = document.createElement('div');
+            notebookPage.className = 'notebook-page slide-up';
+            notebookPage.innerHTML = `
+                <div class="pdf-side">
+                    <div class="page-number">
+                        <i class="fas fa-file-alt"></i>
+                        Page ${pageNum}
+                    </div>
+                    <div class="annotation-tools">
+                        <button class="tool-btn active" onclick="setTool('pen', ${pageNum})">
+                            <i class="fas fa-pen"></i> Pen
+                        </button>
+                        <button class="tool-btn" onclick="setTool('highlighter', ${pageNum})">
+                            <i class="fas fa-highlighter"></i> Highlight
+                        </button>
+                        <button class="tool-btn" onclick="setTool('underline', ${pageNum})">
+                            <i class="fas fa-underline"></i> Underline
+                        </button>
+                        <button class="tool-btn" onclick="setTool('eraser', ${pageNum})">
+                            <i class="fas fa-eraser"></i> Eraser
+                        </button>
+                        <input type="color" class="color-picker" id="color-${pageNum}" value="#ff6b6b" onchange="setColor(${pageNum})">
+                        <button class="tool-btn" onclick="clearAnnotations(${pageNum})">
+                            <i class="fas fa-trash"></i> Clear
+                        </button>
+                    </div>
+                    <div class="pdf-container">
+                        <canvas class="pdf-canvas" id="canvas-${pageNum}"></canvas>
+                        <canvas class="annotation-canvas" id="annotation-${pageNum}"></canvas>
+                    </div>
+                </div>
+                <div class="notes-side">
+                    <textarea 
+                        class="notes-textarea" 
+                        id="notes-${pageNum}"
+                        placeholder="✨ Your brilliant thoughts for page ${pageNum}...
+
+💡 Key insights:
+• 
+
+🤔 Questions:
+• 
+
+📌 Important notes:
+• 
+
+🔗 References:
+• "
+                        oninput="saveNote(${pageNum})"
+                    ></textarea>
+                </div>
+            `;
+
+            document.getElementById('pages-container').appendChild(notebookPage);
+
+            const canvas = document.getElementById(`canvas-${pageNum}`);
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+
+            await page.render({ canvasContext: context, viewport: viewport }).promise;
+            
+            setupAnnotationCanvas(pageNum, canvas.width, canvas.height);
+        }
+
+        // UI Helper Functions
+        function showLoading(message) {
+            const loading = document.getElementById('loading');
+            loading.style.display = 'block';
+            loading.innerHTML = `
+                <div class="loading-spinner"></div>
+                <p>${message}</p>
+            `;
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function showSuccess(message) {
+            const container = document.getElementById('pages-container');
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success fade-in';
+            successDiv.innerHTML = `<i class="fas fa-check-circle"></i> ${message}`;
+            container.insertBefore(successDiv, container.firstChild);
+            
+            setTimeout(() => {
+                successDiv.remove();
+            }, 5000);
+        }
+
+        function showError(message) {
+            const container = document.getElementById('pages-container');
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error fade-in';
+            errorDiv.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${message}`;
+            container.insertBefore(errorDiv, container.firstChild);
+            
+            setTimeout(() => {
+                errorDiv.remove();
+            }, 8000);
+        }
+
+        // Annotation System
+        let currentTool = 'pen';
+        let currentColor = '#ff6b6b';
+
+        function setupAnnotationCanvas(pageNum, width, height) {
+            const annotationCanvas = document.getElementById(`annotation-${pageNum}`);
+            const ctx = annotationCanvas.getContext('2d');
+            
+            annotationCanvas.width = width;
+            annotationCanvas.height = height;
+            
+            let isDrawing = false;
+            let lastX = 0;
+            let lastY = 0;
+
+            annotationCanvas.addEventListener('mousedown', (e) => {
+                isDrawing = true;
+                const rect = annotationCanvas.getBoundingClientRect();
+                lastX = e.clientX - rect.left;
+                lastY = e.clientY - rect.top;
+            });
+
+            annotationCanvas.addEventListener('mousemove', (e) => {
+                if (!isDrawing) return;
+                
+                const rect = annotationCanvas.getBoundingClientRect();
+                const currentX = e.clientX - rect.left;
+                const currentY = e.clientY - rect.top;
+                
+                draw(ctx, lastX, lastY, currentX, currentY, pageNum);
+                
+                lastX = currentX;
+                lastY = currentY;
+            });
+
+            annotationCanvas.addEventListener('mouseup', () => {
+                isDrawing = false;
+                saveAnnotations(pageNum);
+            });
+
+            loadAnnotations(pageNum);
+        }
+
+        function draw(ctx, x1, y1, x2, y2, pageNum) {
+            const color = document.getElementById(`color-${pageNum}`).value;
+            
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            
+            switch(currentTool) {
+                case 'pen':
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 3;
+                    ctx.globalCompositeOperation = 'source-over';
+                    ctx.globalAlpha = 1;
+                    break;
+                case 'highlighter':
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 25;
+                    ctx.globalAlpha = 0.3;
+                    ctx.globalCompositeOperation = 'source-over';
+                    break;
+                case 'underline':
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 4;
+                    ctx.globalCompositeOperation = 'source-over';
+                    ctx.globalAlpha = 1;
+                    break;
+                case 'eraser':
+                    ctx.lineWidth = 25;
+                    ctx.globalCompositeOperation = 'destination-out';
+                    break;
+            }
+            
+            ctx.lineCap = 'round';
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+        }
+
+        function setTool(tool, pageNum) {
+            currentTool = tool;
+            
+            const toolButtons = document.querySelectorAll(`#pages-container .notebook-page:nth-child(${pageNum}) .tool-btn`);
+            toolButtons.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            const canvas = document.getElementById(`annotation-${pageNum}`);
+            canvas.style.cursor = tool === 'eraser' ? 'grab' : 'crosshair';
+        }
+
+        function setColor(pageNum) {
+            currentColor = document.getElementById(`color-${pageNum}`).value;
+        }
+
+        function clearAnnotations(pageNum) {
+            if (confirm('Clear all annotations for this page?')) {
+                const canvas = document.getElementById(`annotation-${pageNum}`);
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const pdfKey = getPdfKey();
+                localStorage.removeItem(`${pdfKey}_annotations_page_${pageNum}`);
+                showSuccess('Annotations cleared!');
+            }
+        }
+
+        function saveAnnotations(pageNum) {
+            const canvas = document.getElementById(`annotation-${pageNum}`);
+            const dataURL = canvas.toDataURL();
+            const pdfKey = getPdfKey();
+            localStorage.setItem(`${pdfKey}_annotations_page_${pageNum}`, dataURL);
+        }
+
+        function loadAnnotations(pageNum) {
+            const pdfKey = getPdfKey();
+            const savedAnnotations = localStorage.getItem(`${pdfKey}_annotations_page_${pageNum}`);
+            if (savedAnnotations) {
+                const canvas = document.getElementById(`annotation-${pageNum}`);
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                img.onload = function() {
+                    ctx.drawImage(img, 0, 0);
+                };
+                img.src = savedAnnotations;
+            }
+        }
+
+        // Notes management
+        function getPdfKey() {
+            return currentPdfName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+        }
+
+        function saveNote(pageNum) {
+            const noteText = document.getElementById(`notes-${pageNum}`).value;
+            const pdfKey = getPdfKey();
+            localStorage.setItem(`${pdfKey}_note_page_${pageNum}`, noteText);
+        }
+
+        function loadNotes() {
+            const pdfKey = getPdfKey();
+            for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                const savedNote = localStorage.getItem(`${pdfKey}_note_page_${pageNum}`);
+                if (savedNote) {
+                    const textarea = document.getElementById(`notes-${pageNum}`);
+                    if (textarea) textarea.value = savedNote;
+                }
+            }
+        }
+
+        function saveAllNotes() {
+            let noteCount = 0;
+            for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                const textarea = document.getElementById(`notes-${pageNum}`);
+                if (textarea && textarea.value.trim()) {
+                    saveNote(pageNum);
+                    noteCount++;
+                }
+            }
+            showSuccess(`Saved notes for ${noteCount} pages!`);
+        }
+
+        function exportNotes() {
+            let allNotes = `# 📚 Notes: ${currentPdfName}\n\n`;
+            allNotes += `Generated on: ${new Date().toLocaleDateString()}\n\n`;
+            allNotes += `---\n\n`;
+            
+            for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                const textarea = document.getElementById(`notes-${pageNum}`);
+                if (textarea && textarea.value.trim()) {
+                    allNotes += `## 📄 Page ${pageNum}\n\n${textarea.value}\n\n---\n\n`;
+                }
+            }
+            
+            const blob = new Blob([allNotes], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${currentPdfName.replace(/[^a-zA-Z0-9]/g, '_')}_notes.md`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showSuccess('Notes exported successfully!');
+        }
+
+        function clearAllNotes() {
+            if (confirm('🗑️ Are you sure you want to clear all notes? This cannot be undone.')) {
+                const pdfKey = getPdfKey();
+                for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                    localStorage.removeItem(`${pdfKey}_note_page_${pageNum}`);
+                    const textarea = document.getElementById(`notes-${pageNum}`);
+                    if (textarea) textarea.value = '';
+                }
+                showSuccess('All notes cleared!');
+            }
+        }
+
+        function downloadOriginalPDF() {
+            if (!currentPdfUrl) {
+                showError('No PDF loaded');
+                return;
+            }
+            const link = document.createElement('a');
+            link.href = currentPdfUrl;
+            link.download = `${currentPdfName}_original.pdf`;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showSuccess('PDF download started!');
+        }
+
+        function downloadAnnotatedPDF() {
+            showError('🚀 Annotated PDF export coming in the next update!');
+        }
+
+        // Ready when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 PDF Studio ready - Upload a file or enter a URL to get started!');
+        });
+    </script>
+</body>
+</html>

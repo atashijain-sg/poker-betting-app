@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gradual Complexity Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <!-- Start adding the complex CSS from the full version -->
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Georgia', serif;
+            background: #f5f5f0;
+            color: #333;
+        }
+
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            font-size: 1.2rem;
+            color: #666;
+        }
+
+        .controls {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            margin: 0 0.5rem;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📖 PDF Notebook</h1>
+        <p id="pdf-title">Gradual Complexity Test</p>
+    </div>
+
+    <div class="container">
+        <!-- Add the complex form structure -->
+        <div class="pdf-source-controls" style="background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 2rem;">
+            <h3 style="margin-bottom: 1rem; color: #2c3e50;">📁 Load PDF</h3>
+            
+            <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem;">
+                <div style="flex: 1; min-width: 300px;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Upload PDF File:</label>
+                    <input type="file" id="pdf-file-input" accept=".pdf" style="width: 100%; padding: 0.5rem; border: 2px solid #ddd; border-radius: 5px;">
+                </div>
+                
+                <div style="flex: 1; min-width: 300px;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Or PDF URL:</label>
+                    <input type="url" id="pdf-url-input" placeholder="https://example.com/document.pdf" style="width: 100%; padding: 0.5rem; border: 2px solid #ddd; border-radius: 5px;">
+                </div>
+                
+                <button class="btn" onclick="loadCustomPDF()">📖 Load PDF</button>
+            </div>
+            
+            <div style="margin-bottom: 1rem;">
+                <button class="btn" onclick="loadDefaultPDF()" style="background: #27ae60;">📚 Load Default (Populism Economics)</button>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn" onclick="testPDF()">🧪 Test PDF Loading</button>
+        </div>
+
+        <div id="loading" class="loading">Click 'Test PDF Loading' to start</div>
+        <div id="pages-container"></div>
+    </div>
+
+    <script>
+        // Same setup as working debug version
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        const DEFAULT_PDF_URL = '/api/pdf-proxy';
+        let currentPdfUrl = null;
+        let currentPdfName = 'document';
+        let pdfDoc = null;
+        let currentPage = 1;
+        let totalPages = 0;
+
+        // Same working functions from debug version
+        async function testPDF() {
+            try {
+                console.log('Starting PDF test...');
+                document.getElementById('loading').textContent = 'Testing with complex HTML structure...';
+                
+                const response = await fetch(DEFAULT_PDF_URL);
+                console.log('Fetch response:', response.status, response.statusText);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const arrayBuffer = await response.arrayBuffer();
+                console.log('ArrayBuffer size:', arrayBuffer.byteLength);
+                
+                const loadingTask = pdfjsLib.getDocument(arrayBuffer);
+                pdfDoc = await loadingTask.promise;
+                totalPages = pdfDoc.numPages;
+                
+                console.log('PDF loaded successfully, pages:', totalPages);
+                
+                document.getElementById('pdf-title').textContent = `Test PDF (${totalPages} pages)`;
+                document.getElementById('loading').innerHTML = '<div style="color: green;">✅ PDF loaded successfully with complex HTML structure!</div>';
+                
+            } catch (error) {
+                console.error('PDF loading error:', error);
+                document.getElementById('loading').innerHTML = `
+                    <div style="color: red;">
+                        <h3>❌ Failed with Complex HTML</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <p><strong>Type:</strong> ${error.name}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Dummy functions for the buttons
+        function loadCustomPDF() {
+            alert('Custom PDF loading not implemented in this test');
+        }
+
+        function loadDefaultPDF() {
+            testPDF();
+        }
+
+        // Global error handlers
+        window.addEventListener('error', (e) => {
+            console.error('Global error:', e.error);
+        });
+
+        window.addEventListener('unhandledrejection', (e) => {
+            console.error('Unhandled promise rejection:', e.reason);
+        });
+    </script>
+</body>
+</html>

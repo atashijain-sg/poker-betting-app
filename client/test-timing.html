@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timing Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <h1>📖 Timing Test</h1>
+    
+    <div id="loading">Testing element access timing...</div>
+    
+    <!-- Add the input elements -->
+    <input type="file" id="pdf-file-input" accept=".pdf">
+    <input type="url" id="pdf-url-input" placeholder="https://example.com/document.pdf">
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        const DEFAULT_PDF_URL = '/api/pdf-proxy';
+
+        function testElementAccess() {
+            const loading = document.getElementById('loading');
+            
+            try {
+                console.log('Testing element access...');
+                loading.textContent = 'Testing element access...';
+                
+                // Test accessing the input elements
+                const fileInput = document.getElementById('pdf-file-input');
+                const urlInput = document.getElementById('pdf-url-input');
+                
+                console.log('fileInput:', fileInput);
+                console.log('urlInput:', urlInput);
+                
+                if (!fileInput) {
+                    throw new Error('pdf-file-input not found');
+                }
+                if (!urlInput) {
+                    throw new Error('pdf-url-input not found');
+                }
+                
+                // Test clearing them
+                fileInput.value = '';
+                urlInput.value = '';
+                
+                console.log('✅ Element access successful');
+                loading.textContent = '✅ Element access successful - now testing PDF load';
+                
+                // Now test PDF loading
+                return testPDFLoad();
+                
+            } catch (error) {
+                console.error('❌ Element access failed:', error);
+                loading.innerHTML = `
+                    <div style="color: red;">
+                        <p>❌ Element access failed: ${error.message}</p>
+                        <p>This is likely the cause of the original problem!</p>
+                    </div>
+                `;
+                return Promise.reject(error);
+            }
+        }
+
+        async function testPDFLoad() {
+            const loading = document.getElementById('loading');
+            
+            try {
+                loading.textContent = 'Testing PDF load...';
+                
+                const response = await fetch(DEFAULT_PDF_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const arrayBuffer = await response.arrayBuffer();
+                const loadingTask = pdfjsLib.getDocument(arrayBuffer);
+                const pdf = await loadingTask.promise;
+                
+                console.log('✅ PDF load successful, pages:', pdf.numPages);
+                loading.innerHTML = `
+                    <div style="color: green;">
+                        <p>✅ All tests passed!</p>
+                        <p>PDF loaded successfully with ${pdf.numPages} pages</p>
+                        <p>The timing issue is likely in the original code.</p>
+                    </div>
+                `;
+                
+            } catch (error) {
+                console.error('❌ PDF load failed:', error);
+                loading.innerHTML = `
+                    <div style="color: red;">
+                        <p>❌ PDF load failed: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Test both immediate and delayed access
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('=== DOM LOADED TEST ===');
+            testElementAccess();
+        });
+    </script>
+</body>
+</html>

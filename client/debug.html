@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Page</title>
+    <style>
+        .test { margin: 1rem 0; padding: 1rem; border: 1px solid #ccc; }
+        .success { background: #d4edda; }
+        .error { background: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h1>Diagnostic Tests</h1>
+    <button onclick="runAllTests()">🔄 Run All Tests</button>
+    
+    <div id="test1" class="test">
+        <h3>Test 1: Basic Fetch</h3>
+        <div id="result1">Click run to test</div>
+    </div>
+    
+    <div id="test2" class="test">
+        <h3>Test 2: Health Endpoint</h3>
+        <div id="result2">Click run to test</div>
+    </div>
+    
+    <div id="test3" class="test">
+        <h3>Test 3: PDF Endpoint (Head)</h3>
+        <div id="result3">Click run to test</div>
+    </div>
+    
+    <div id="test4" class="test">
+        <h3>Test 4: PDF Endpoint (Get)</h3>
+        <div id="result4">Click run to test</div>
+    </div>
+    
+    <div id="browser-info" class="test">
+        <h3>Browser Information</h3>
+        <div>
+            <p><strong>URL:</strong> <span id="current-url"></span></p>
+            <p><strong>User Agent:</strong> <span id="user-agent"></span></p>
+            <p><strong>Protocol:</strong> <span id="protocol"></span></p>
+        </div>
+    </div>
+    
+    <script>
+        document.getElementById('current-url').textContent = window.location.href;
+        document.getElementById('user-agent').textContent = navigator.userAgent;
+        document.getElementById('protocol').textContent = window.location.protocol;
+        
+        async function test1() {
+            const result = document.getElementById('result1');
+            const test = document.getElementById('test1');
+            
+            try {
+                result.textContent = 'Testing basic fetch...';
+                const response = await fetch('/');
+                result.textContent = `✅ SUCCESS: Status ${response.status}`;
+                test.className = 'test success';
+            } catch (error) {
+                result.textContent = `❌ FAILED: ${error.message}`;
+                test.className = 'test error';
+            }
+        }
+        
+        async function test2() {
+            const result = document.getElementById('result2');
+            const test = document.getElementById('test2');
+            
+            try {
+                result.textContent = 'Testing health endpoint...';
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                result.textContent = `✅ SUCCESS: ${JSON.stringify(data)}`;
+                test.className = 'test success';
+            } catch (error) {
+                result.textContent = `❌ FAILED: ${error.message}`;
+                test.className = 'test error';
+            }
+        }
+        
+        async function test3() {
+            const result = document.getElementById('result3');
+            const test = document.getElementById('test3');
+            
+            try {
+                result.textContent = 'Testing PDF endpoint (HEAD)...';
+                const response = await fetch('/api/pdf-proxy', { method: 'HEAD' });
+                result.textContent = `✅ SUCCESS: Status ${response.status}, Content-Type: ${response.headers.get('content-type')}`;
+                test.className = 'test success';
+            } catch (error) {
+                result.textContent = `❌ FAILED: ${error.message}`;
+                test.className = 'test error';
+            }
+        }
+        
+        async function test4() {
+            const result = document.getElementById('result4');
+            const test = document.getElementById('test4');
+            
+            try {
+                result.textContent = 'Testing PDF endpoint (GET)...';
+                const response = await fetch('/api/pdf-proxy');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const contentLength = response.headers.get('content-length');
+                const contentType = response.headers.get('content-type');
+                
+                // Don't actually read the PDF data, just check headers
+                result.textContent = `✅ SUCCESS: ${contentType}, Size: ${contentLength} bytes`;
+                test.className = 'test success';
+                
+            } catch (error) {
+                result.textContent = `❌ FAILED: ${error.message}`;
+                test.className = 'test error';
+            }
+        }
+        
+        async function runAllTests() {
+            await test1();
+            await test2();
+            await test3();
+            await test4();
+        }
+        
+        // Auto-run tests on page load
+        runAllTests();
+    </script>
+</body>
+</html>

@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Notebook - Is Populism Necessarily Bad Economics?</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Georgia', serif;
+            background: #f3e8ff;
+            color: #333;
+        }
+
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .notebook-page {
+            display: flex;
+            margin-bottom: 3rem;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow: hidden;
+            min-height: 800px;
+        }
+
+        .pdf-side {
+            flex: 1;
+            padding: 2rem;
+            border-right: 3px solid #e74c3c;
+            position: relative;
+        }
+
+        .pdf-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .pdf-canvas {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            display: block;
+        }
+
+        .annotation-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: crosshair;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .annotation-tools {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 5px;
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .tool-btn {
+            padding: 0.5rem 1rem;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .tool-btn.active {
+            background: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+
+        .tool-btn:hover {
+            border-color: #3498db;
+        }
+
+        .color-picker {
+            width: 40px;
+            height: 30px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .notes-side {
+            flex: 1;
+            padding: 2rem;
+            background: linear-gradient(to right, #fff 0%, #fff 40px, #e8f4fd 40px, #e8f4fd 42px, #fff 42px);
+            position: relative;
+        }
+
+        .notes-side::before {
+            content: '';
+            position: absolute;
+            left: 40px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #ff69b4;
+        }
+
+        .page-number {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: #3498db;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .notes-textarea {
+            width: 100%;
+            height: 700px;
+            border: none;
+            background: transparent;
+            font-family: 'Georgia', serif;
+            font-size: 1rem;
+            line-height: 1.6;
+            padding: 1rem 1rem 1rem 50px;
+            resize: none;
+            outline: none;
+            background-image: 
+                repeating-linear-gradient(
+                    transparent,
+                    transparent 25px,
+                    #e0e0e0 25px,
+                    #e0e0e0 26px
+                );
+        }
+
+        .notes-textarea::placeholder {
+            color: #999;
+            font-style: italic;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            font-size: 1.2rem;
+            color: #666;
+        }
+
+        .controls {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            margin: 0 0.5rem;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        .btn:hover {
+            background: #2980b9;
+        }
+
+        .btn:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 768px) {
+            .notebook-page {
+                flex-direction: column;
+            }
+            
+            .pdf-side {
+                border-right: none;
+                border-bottom: 3px solid #e74c3c;
+            }
+            
+            .notes-textarea {
+                height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📖 PDF Notebook</h1>
+        <p id="pdf-title">Universal PDF Annotation Tool</p>
+    </div>
+
+    <div class="container">
+        <div class="pdf-source-controls" style="background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 2rem;">
+            <h3 style="margin-bottom: 1rem; color: #2c3e50;">📁 Load PDF</h3>
+            
+            <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem;">
+                <div style="flex: 1; min-width: 300px;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Upload PDF File:</label>
+                    <input type="file" id="pdf-file-input" accept=".pdf" style="width: 100%; padding: 0.5rem; border: 2px solid #ddd; border-radius: 5px;">
+                </div>
+                
+                <div style="flex: 1; min-width: 300px;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Or PDF URL:</label>
+                    <input type="url" id="pdf-url-input" placeholder="https://example.com/document.pdf" style="width: 100%; padding: 0.5rem; border: 2px solid #ddd; border-radius: 5px;">
+                </div>
+                
+                <button class="btn" onclick="loadCustomPDF()">📖 Load PDF</button>
+            </div>
+            
+            <div style="margin-bottom: 1rem;">
+                <button class="btn" onclick="loadDefaultPDF()" style="background: #27ae60;">📚 Load Default (Populism Economics)</button>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn" onclick="downloadOriginalPDF()">📥 Download Original PDF</button>
+            <button class="btn" onclick="downloadAnnotatedPDF()">📑 Download with Notes & Annotations</button>
+            <button class="btn" onclick="saveAllNotes()">💾 Save All Notes</button>
+            <button class="btn" onclick="exportNotes()">📄 Export Notes</button>
+            <button class="btn" onclick="clearAllNotes()">🗑️ Clear All Notes</button>
+        </div>
+
+        <div id="loading" class="loading">
+            Loading PDF pages... Please wait.
+        </div>
+
+        <div id="pages-container"></div>
+    </div>
+
+    <script>
+        // PDF.js setup
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        const DEFAULT_PDF_URL = '/api/pdf-proxy';
+        let currentPdfUrl = null;
+        let currentPdfName = 'document';
+        let pdfDoc = null;
+        let currentPage = 1;
+        let totalPages = 0;
+
+        // Load and render PDF (using exact same approach as working minimal version)
+        async function loadPDF(pdfSource, pdfName = 'document') {
+            try {
+                console.log('Starting PDF load...', pdfSource);
+                
+                // Clear existing content
+                document.getElementById('pages-container').innerHTML = '';
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('loading').innerHTML = 'Fetching PDF...';
+                
+                // Update global variables
+                currentPdfUrl = pdfSource;
+                currentPdfName = pdfName;
+                
+                // Use exact same fetch method as working minimal version
+                const response = await fetch(pdfSource);
+                console.log('Fetch response:', response.status, response.statusText);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                document.getElementById('loading').innerHTML = 'Converting to ArrayBuffer...';
+                const arrayBuffer = await response.arrayBuffer();
+                console.log('ArrayBuffer size:', arrayBuffer.byteLength);
+                
+                document.getElementById('loading').innerHTML = 'Loading with PDF.js...';
+                
+                // Use exact same PDF.js method as working minimal version
+                const loadingTask = pdfjsLib.getDocument(arrayBuffer);
+                pdfDoc = await loadingTask.promise;
+                totalPages = pdfDoc.numPages;
+                
+                console.log('PDF loaded successfully, pages:', totalPages);
+                
+                // Update title
+                document.getElementById('pdf-title').textContent = `${pdfName} (${totalPages} pages)`;
+                
+                document.getElementById('loading').innerHTML = 'Rendering pages...';
+                
+                // Render all pages
+                for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                    await renderPage(pageNum);
+                    document.getElementById('loading').innerHTML = `Rendering page ${pageNum} of ${totalPages}...`;
+                }
+                
+                document.getElementById('loading').style.display = 'none';
+                
+                // Load saved notes for this PDF
+                loadNotes();
+                
+            } catch (error) {
+                console.error('PDF loading error:', error);
+                document.getElementById('loading').innerHTML = `
+                    <div style="color: red;">
+                        <h3>Error Loading PDF</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <p><strong>Type:</strong> ${error.name}</p>
+                        <button class="btn" onclick="loadDefaultPDF()">🔄 Retry</button>
+                    </div>
+                `;
+            }
+        }
+
+        // Load custom PDF from file or URL
+        async function loadCustomPDF() {
+            const fileInput = document.getElementById('pdf-file-input');
+            const urlInput = document.getElementById('pdf-url-input');
+            
+            if (fileInput.files.length > 0) {
+                // Load from file
+                const file = fileInput.files[0];
+                const fileUrl = URL.createObjectURL(file);
+                const fileName = file.name.replace('.pdf', '');
+                await loadPDF(fileUrl, fileName);
+                
+                // Clear URL input
+                urlInput.value = '';
+            } else if (urlInput.value.trim()) {
+                // Load from URL
+                const url = urlInput.value.trim();
+                const fileName = url.split('/').pop().replace('.pdf', '') || 'Remote PDF';
+                
+                try {
+                    await loadPDF(url, fileName);
+                    // Clear file input
+                    fileInput.value = '';
+                } catch (error) {
+                    alert('Error loading PDF from URL. Please check the URL and ensure it supports CORS.');
+                }
+            } else {
+                alert('Please select a file or enter a URL.');
+            }
+        }
+
+        // Load default PDF (simplified to match working minimal version)
+        async function loadDefaultPDF() {
+            document.getElementById('pdf-file-input').value = '';
+            document.getElementById('pdf-url-input').value = '';
+            
+            // Skip connectivity tests and use the same direct approach as minimal version
+            await loadPDF(DEFAULT_PDF_URL, 'Is Populism Necessarily Bad Economics - Dani Rodrik');
+        }
+
+        async function renderPage(pageNum) {
+            const page = await pdfDoc.getPage(pageNum);
+            const scale = 1.2;
+            const viewport = page.getViewport({ scale });
+
+            // Create notebook page container
+            const notebookPage = document.createElement('div');
+            notebookPage.className = 'notebook-page';
+            notebookPage.innerHTML = `
+                <div class="pdf-side">
+                    <div class="page-number">Page ${pageNum}</div>
+                    <div class="annotation-tools">
+                        <button class="tool-btn active" onclick="setTool('pen', ${pageNum})">✏️ Pen</button>
+                        <button class="tool-btn" onclick="setTool('highlighter', ${pageNum})">🖍️ Highlight</button>
+                        <button class="tool-btn" onclick="setTool('underline', ${pageNum})">〰️ Underline</button>
+                        <button class="tool-btn" onclick="setTool('eraser', ${pageNum})">🧽 Eraser</button>
+                        <input type="color" class="color-picker" id="color-${pageNum}" value="#ffff00" onchange="setColor(${pageNum})">
+                        <button class="tool-btn" onclick="clearAnnotations(${pageNum})">🗑️ Clear</button>
+                    </div>
+                    <div class="pdf-container">
+                        <canvas class="pdf-canvas" id="canvas-${pageNum}"></canvas>
+                        <canvas class="annotation-canvas" id="annotation-${pageNum}"></canvas>
+                    </div>
+                </div>
+                <div class="notes-side">
+                    <textarea 
+                        class="notes-textarea" 
+                        id="notes-${pageNum}"
+                        placeholder="Write your notes for page ${pageNum} here...
+                        
+• Key points
+• Questions  
+• Thoughts
+• References"
+                        oninput="saveNote(${pageNum})"
+                    ></textarea>
+                </div>
+            `;
+
+            document.getElementById('pages-container').appendChild(notebookPage);
+
+            // Render PDF page to canvas
+            const canvas = document.getElementById(`canvas-${pageNum}`);
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+
+            const renderContext = {
+                canvasContext: context,
+                viewport: viewport
+            };
+
+            await page.render(renderContext).promise;
+
+            // Setup annotation canvas
+            setupAnnotationCanvas(pageNum, canvas.width, canvas.height);
+        }
+
+        // Notes management (PDF-specific)
+        function getPdfKey() {
+            return currentPdfName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+        }
+
+        function saveNote(pageNum) {
+            const noteText = document.getElementById(`notes-${pageNum}`).value;
+            const pdfKey = getPdfKey();
+            localStorage.setItem(`${pdfKey}_note_page_${pageNum}`, noteText);
+        }
+
+        function loadNotes() {
+            const pdfKey = getPdfKey();
+            for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                const savedNote = localStorage.getItem(`${pdfKey}_note_page_${pageNum}`);
+                if (savedNote) {
+                    const textarea = document.getElementById(`notes-${pageNum}`);
+                    if (textarea) {
+                        textarea.value = savedNote;
+                    }
+                }
+            }
+        }
+
+        function saveAllNotes() {
+            let noteCount = 0;
+            for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                const textarea = document.getElementById(`notes-${pageNum}`);
+                if (textarea && textarea.value.trim()) {
+                    saveNote(pageNum);
+                    noteCount++;
+                }
+            }
+            alert(`Saved notes for ${noteCount} pages!`);
+        }
+
+        function exportNotes() {
+            let allNotes = `# Notes: ${currentPdfName}\n\n`;
+            
+            for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                const textarea = document.getElementById(`notes-${pageNum}`);
+                if (textarea && textarea.value.trim()) {
+                    allNotes += `## Page ${pageNum}\n\n${textarea.value}\n\n---\n\n`;
+                }
+            }
+            
+            // Create and download file
+            const blob = new Blob([allNotes], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${currentPdfName.replace(/[^a-zA-Z0-9]/g, '_')}_notes.md`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function downloadOriginalPDF() {
+            if (!currentPdfUrl) {
+                alert('No PDF loaded');
+                return;
+            }
+            
+            // Create a temporary link element and trigger download
+            const link = document.createElement('a');
+            link.href = currentPdfUrl;
+            link.download = `${currentPdfName}_original.pdf`;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        async function downloadAnnotatedPDF() {
+            try {
+                // Show loading state
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '⏳ Generating PDF...';
+                btn.disabled = true;
+
+                // Create a new jsPDF instance with landscape orientation for side-by-side layout
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({
+                    orientation: 'landscape',
+                    unit: 'px',
+                    format: [1122, 792] // Wide format for side-by-side layout
+                });
+
+                let isFirstPage = true;
+
+                for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                    if (!isFirstPage) {
+                        pdf.addPage();
+                    }
+                    isFirstPage = false;
+
+                    // Get the original PDF canvas and notes
+                    const pdfCanvas = document.getElementById(`canvas-${pageNum}`);
+                    const annotationCanvas = document.getElementById(`annotation-${pageNum}`);
+                    const notesTextarea = document.getElementById(`notes-${pageNum}`);
+
+                    // Create a combined canvas with PDF + annotations
+                    const combinedCanvas = document.createElement('canvas');
+                    const combinedCtx = combinedCanvas.getContext('2d');
+                    
+                    combinedCanvas.width = pdfCanvas.width;
+                    combinedCanvas.height = pdfCanvas.height;
+
+                    // Draw the original PDF
+                    combinedCtx.drawImage(pdfCanvas, 0, 0);
+                    
+                    // Draw annotations on top
+                    if (annotationCanvas) {
+                        combinedCtx.drawImage(annotationCanvas, 0, 0);
+                    }
+
+                    // Convert combined canvas to image
+                    const imgData = combinedCanvas.toDataURL('image/png');
+                    
+                    // Calculate dimensions for the PDF side (left half)
+                    const pageWidth = pdf.internal.pageSize.getWidth();
+                    const pageHeight = pdf.internal.pageSize.getHeight();
+                    const leftSideWidth = (pageWidth / 2) - 30; // Half width minus margins
+                    const imgAspectRatio = combinedCanvas.width / combinedCanvas.height;
+                    
+                    let imgWidth = leftSideWidth;
+                    let imgHeight = imgWidth / imgAspectRatio;
+                    
+                    // If image is too tall, scale by height
+                    if (imgHeight > pageHeight - 40) {
+                        imgHeight = pageHeight - 40;
+                        imgWidth = imgHeight * imgAspectRatio;
+                    }
+
+                    // Add the PDF page with annotations to the left side
+                    pdf.addImage(imgData, 'PNG', 20, 20, imgWidth, imgHeight);
+
+                    // Add a vertical divider line
+                    pdf.setDrawColor(231, 76, 60); // Red color like the CSS
+                    pdf.setLineWidth(3);
+                    pdf.line(pageWidth / 2, 10, pageWidth / 2, pageHeight - 10);
+
+                    // Add notes to the right side
+                    const notes = notesTextarea ? notesTextarea.value.trim() : '';
+                    const rightSideX = (pageWidth / 2) + 20;
+                    const rightSideWidth = leftSideWidth - 20;
+
+                    // Add page number at the top right
+                    pdf.setFontSize(14);
+                    pdf.setFont(undefined, 'bold');
+                    pdf.setTextColor(52, 152, 219); // Blue color
+                    pdf.text(`Page ${pageNum}`, rightSideX, 40);
+
+                    // Add notes content
+                    if (notes) {
+                        // Add notes header
+                        pdf.setFontSize(12);
+                        pdf.setFont(undefined, 'bold');
+                        pdf.setTextColor(0, 0, 0); // Black
+                        pdf.text('Notes:', rightSideX, 70);
+                        
+                        // Add horizontal lines to mimic notebook paper
+                        pdf.setDrawColor(224, 224, 224); // Light gray
+                        pdf.setLineWidth(0.5);
+                        for (let y = 90; y < pageHeight - 20; y += 20) {
+                            pdf.line(rightSideX, y, rightSideX + rightSideWidth, y);
+                        }
+
+                        // Add left margin line (like notebook paper)
+                        pdf.setDrawColor(255, 105, 180); // Pink color
+                        pdf.setLineWidth(1);
+                        pdf.line(rightSideX + 30, 80, rightSideX + 30, pageHeight - 20);
+
+                        // Add notes content
+                        pdf.setFontSize(11);
+                        pdf.setFont(undefined, 'normal');
+                        pdf.setTextColor(0, 0, 0);
+                        
+                        // Split notes into lines that fit the right side width
+                        const splitNotes = pdf.splitTextToSize(notes, rightSideWidth - 40);
+                        pdf.text(splitNotes, rightSideX + 35, 95);
+                    } else {
+                        // Add placeholder text and lines even if no notes
+                        pdf.setFontSize(11);
+                        pdf.setFont(undefined, 'italic');
+                        pdf.setTextColor(150, 150, 150);
+                        pdf.text('(No notes for this page)', rightSideX + 35, 95);
+
+                        // Add horizontal lines for writing
+                        pdf.setDrawColor(224, 224, 224);
+                        pdf.setLineWidth(0.5);
+                        for (let y = 90; y < pageHeight - 20; y += 20) {
+                            pdf.line(rightSideX, y, rightSideX + rightSideWidth, y);
+                        }
+
+                        // Add left margin line
+                        pdf.setDrawColor(255, 105, 180);
+                        pdf.setLineWidth(1);
+                        pdf.line(rightSideX + 30, 80, rightSideX + 30, pageHeight - 20);
+                    }
+                }
+
+                // Save the PDF
+                pdf.save(`${currentPdfName.replace(/[^a-zA-Z0-9]/g, '_')}_annotated.pdf`);
+
+                // Restore button state
+                btn.textContent = originalText;
+                btn.disabled = false;
+
+            } catch (error) {
+                console.error('Error generating annotated PDF:', error);
+                alert('Error generating PDF. Please try again.');
+                
+                // Restore button state
+                const btn = event.target;
+                btn.textContent = '📑 Download with Notes & Annotations';
+                btn.disabled = false;
+            }
+        }
+
+        function clearAllNotes() {
+            if (confirm('Are you sure you want to clear all notes? This cannot be undone.')) {
+                const pdfKey = getPdfKey();
+                for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                    localStorage.removeItem(`${pdfKey}_note_page_${pageNum}`);
+                    const textarea = document.getElementById(`notes-${pageNum}`);
+                    if (textarea) {
+                        textarea.value = '';
+                    }
+                }
+                alert('All notes cleared!');
+            }
+        }
+
+        // Auto-save every 30 seconds
+        setInterval(() => {
+            for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                const textarea = document.getElementById(`notes-${pageNum}`);
+                if (textarea) {
+                    saveNote(pageNum);
+                }
+            }
+        }, 30000);
+
+        // Annotation system
+        let currentTool = 'pen';
+        let currentColor = '#ffff00';
+        let isDrawing = false;
+        let annotationData = {};
+
+        function setupAnnotationCanvas(pageNum, width, height) {
+            const annotationCanvas = document.getElementById(`annotation-${pageNum}`);
+            const ctx = annotationCanvas.getContext('2d');
+            
+            annotationCanvas.width = width;
+            annotationCanvas.height = height;
+            
+            let isDrawing = false;
+            let lastX = 0;
+            let lastY = 0;
+
+            annotationCanvas.addEventListener('mousedown', (e) => {
+                isDrawing = true;
+                const rect = annotationCanvas.getBoundingClientRect();
+                lastX = e.clientX - rect.left;
+                lastY = e.clientY - rect.top;
+            });
+
+            annotationCanvas.addEventListener('mousemove', (e) => {
+                if (!isDrawing) return;
+                
+                const rect = annotationCanvas.getBoundingClientRect();
+                const currentX = e.clientX - rect.left;
+                const currentY = e.clientY - rect.top;
+                
+                draw(ctx, lastX, lastY, currentX, currentY, pageNum);
+                
+                lastX = currentX;
+                lastY = currentY;
+            });
+
+            annotationCanvas.addEventListener('mouseup', () => {
+                isDrawing = false;
+                saveAnnotations(pageNum);
+            });
+
+            annotationCanvas.addEventListener('mouseout', () => {
+                isDrawing = false;
+            });
+
+            // Load existing annotations
+            loadAnnotations(pageNum);
+        }
+
+        function draw(ctx, x1, y1, x2, y2, pageNum) {
+            const color = document.getElementById(`color-${pageNum}`).value;
+            
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            
+            switch(currentTool) {
+                case 'pen':
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    ctx.globalCompositeOperation = 'source-over';
+                    break;
+                case 'highlighter':
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 20;
+                    ctx.globalAlpha = 0.3;
+                    ctx.globalCompositeOperation = 'source-over';
+                    break;
+                case 'underline':
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 3;
+                    ctx.globalCompositeOperation = 'source-over';
+                    break;
+                case 'eraser':
+                    ctx.lineWidth = 20;
+                    ctx.globalCompositeOperation = 'destination-out';
+                    break;
+            }
+            
+            ctx.lineCap = 'round';
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+        }
+
+        function setTool(tool, pageNum) {
+            currentTool = tool;
+            
+            // Update active button
+            const toolButtons = document.querySelectorAll(`#pages-container .notebook-page:nth-child(${pageNum}) .tool-btn`);
+            toolButtons.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Update cursor
+            const canvas = document.getElementById(`annotation-${pageNum}`);
+            canvas.style.cursor = tool === 'eraser' ? 'grab' : 'crosshair';
+        }
+
+        function setColor(pageNum) {
+            currentColor = document.getElementById(`color-${pageNum}`).value;
+        }
+
+        function clearAnnotations(pageNum) {
+            if (confirm('Clear all annotations for this page?')) {
+                const canvas = document.getElementById(`annotation-${pageNum}`);
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const pdfKey = getPdfKey();
+                localStorage.removeItem(`${pdfKey}_annotations_page_${pageNum}`);
+            }
+        }
+
+        function saveAnnotations(pageNum) {
+            const canvas = document.getElementById(`annotation-${pageNum}`);
+            const dataURL = canvas.toDataURL();
+            const pdfKey = getPdfKey();
+            localStorage.setItem(`${pdfKey}_annotations_page_${pageNum}`, dataURL);
+        }
+
+        function loadAnnotations(pageNum) {
+            const pdfKey = getPdfKey();
+            const savedAnnotations = localStorage.getItem(`${pdfKey}_annotations_page_${pageNum}`);
+            if (savedAnnotations) {
+                const canvas = document.getElementById(`annotation-${pageNum}`);
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                img.onload = function() {
+                    ctx.drawImage(img, 0, 0);
+                };
+                img.src = savedAnnotations;
+            }
+        }
+
+        // Load default PDF when page loads (same as working minimal version)
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded, starting PDF load...');
+            loadDefaultPDF();
+        });
+    </script>
+</body>
+</html>

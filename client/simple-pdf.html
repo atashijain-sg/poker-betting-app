@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple PDF Test</title>
+</head>
+<body>
+    <h1>Simple PDF Loading Test</h1>
+    <div id="status">Loading...</div>
+    <div id="result"></div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        async function testPDF() {
+            const status = document.getElementById('status');
+            const result = document.getElementById('result');
+            
+            try {
+                status.textContent = 'Testing server...';
+                
+                // Test server
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                status.textContent = `Server OK: ${data.status}. Loading PDF...`;
+                
+                // Test PDF loading
+                const pdfResponse = await fetch('/api/pdf-proxy');
+                const pdfData = await pdfResponse.arrayBuffer();
+                
+                const pdf = await pdfjsLib.getDocument(pdfData).promise;
+                
+                status.textContent = '✅ SUCCESS!';
+                result.innerHTML = `
+                    <p><strong>PDF loaded successfully!</strong></p>
+                    <p>Pages: ${pdf.numPages}</p>
+                    <p><a href="/pdf-notebook">Open Full PDF Notebook</a></p>
+                `;
+                
+            } catch (error) {
+                status.textContent = '❌ ERROR';
+                result.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+                console.error('Detailed error:', error);
+            }
+        }
+        
+        testPDF();
+    </script>
+</body>
+</html>

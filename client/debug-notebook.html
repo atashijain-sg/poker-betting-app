@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug PDF Notebook</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2rem; }
+        .loading { text-align: center; padding: 2rem; color: #666; }
+    </style>
+</head>
+<body>
+    <h1>📖 Debug PDF Notebook</h1>
+    <p id="pdf-title">Loading...</p>
+    
+    <div id="loading" class="loading">Starting...</div>
+    <div id="pages-container"></div>
+
+    <script>
+        // Setup PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        const DEFAULT_PDF_URL = '/api/pdf-proxy';
+        let currentPdfUrl = null;
+        let currentPdfName = 'document';
+        let pdfDoc = null;
+        let currentPage = 1;
+        let totalPages = 0;
+
+        // Test 1: Check if all required objects exist
+        function checkDependencies() {
+            console.log('=== DEPENDENCY CHECK ===');
+            console.log('pdfjsLib exists:', typeof pdfjsLib !== 'undefined');
+            console.log('jsPDF exists:', typeof window.jspdf !== 'undefined');
+            console.log('fetch exists:', typeof fetch !== 'undefined');
+            
+            if (typeof pdfjsLib === 'undefined') {
+                throw new Error('PDF.js library not loaded');
+            }
+            
+            document.getElementById('loading').textContent = '✅ Dependencies OK';
+        }
+
+        // Test 2: Simple fetch test
+        async function testFetch() {
+            console.log('=== FETCH TEST ===');
+            document.getElementById('loading').textContent = 'Testing fetch...';
+            
+            const response = await fetch(DEFAULT_PDF_URL);
+            console.log('Fetch response:', response.status, response.statusText);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const arrayBuffer = await response.arrayBuffer();
+            console.log('ArrayBuffer size:', arrayBuffer.byteLength);
+            
+            document.getElementById('loading').textContent = '✅ Fetch OK';
+            return arrayBuffer;
+        }
+
+        // Test 3: PDF.js loading test
+        async function testPDFJS(arrayBuffer) {
+            console.log('=== PDF.JS TEST ===');
+            document.getElementById('loading').textContent = 'Testing PDF.js...';
+            
+            const loadingTask = pdfjsLib.getDocument(arrayBuffer);
+            const pdf = await loadingTask.promise;
+            
+            console.log('PDF loaded, pages:', pdf.numPages);
+            document.getElementById('loading').textContent = '✅ PDF.js OK';
+            
+            return pdf;
+        }
+
+        // Main test function
+        async function runTests() {
+            try {
+                console.log('=== STARTING DEBUG TESTS ===');
+                
+                // Test 1: Dependencies
+                checkDependencies();
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // Test 2: Fetch
+                const arrayBuffer = await testFetch();
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // Test 3: PDF.js
+                pdfDoc = await testPDFJS(arrayBuffer);
+                totalPages = pdfDoc.numPages;
+                
+                // Update UI
+                currentPdfName = 'Is Populism Necessarily Bad Economics - Dani Rodrik';
+                document.getElementById('pdf-title').textContent = `${currentPdfName} (${totalPages} pages)`;
+                document.getElementById('loading').textContent = '✅ ALL TESTS PASSED!';
+                
+                console.log('=== ALL TESTS COMPLETED SUCCESSFULLY ===');
+                
+            } catch (error) {
+                console.error('=== TEST FAILED ===');
+                console.error('Error:', error);
+                console.error('Stack:', error.stack);
+                
+                document.getElementById('loading').innerHTML = `
+                    <div style="color: red;">
+                        <h3>❌ Debug Test Failed</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <p><strong>Type:</strong> ${error.name}</p>
+                        <p><strong>Step:</strong> Check console for details</p>
+                        <button onclick="runTests()">🔄 Retry</button>
+                    </div>
+                `;
+            }
+        }
+
+        // Global error handler
+        window.addEventListener('error', (e) => {
+            console.error('Global error:', e.error);
+            console.error('Message:', e.message);
+            console.error('Source:', e.filename, 'Line:', e.lineno);
+        });
+
+        // Global unhandled promise rejection handler
+        window.addEventListener('unhandledrejection', (e) => {
+            console.error('Unhandled promise rejection:', e.reason);
+        });
+
+        // Start tests when DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded, starting debug tests...');
+            runTests();
+        });
+    </script>
+</body>
+</html>
