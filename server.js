@@ -238,6 +238,7 @@ class PokerGame {
   constructor(roomCode) {
     this.roomCode = roomCode;
     this.players = {};
+    this.admin = null; // Track room creator
     this.currentPlayerIndex = 0;
     this.currentPlayer = null;
     this.gameStarted = false;
@@ -253,9 +254,15 @@ class PokerGame {
     this.dealerIndex = 0;
   }
 
-  addPlayer(playerId, playerName) {
+  addPlayer(playerId, playerName, isAdmin = false) {
     if (Object.keys(this.players).length >= this.maxPlayers) {
       throw new Error('Game is full');
+    }
+
+    // Check for duplicate player names
+    const existingPlayer = Object.values(this.players).find(p => p.name === playerName);
+    if (existingPlayer) {
+      throw new Error('Player name already exists');
     }
 
     this.players[playerId] = {
@@ -270,14 +277,39 @@ class PokerGame {
       isAllIn: false
     };
 
+    // Set first player as admin
+    if (isAdmin || !this.admin) {
+      this.admin = playerId;
+    }
+
     return this.players[playerId];
   }
 
   removePlayer(playerId) {
     delete this.players[playerId];
+    
+    // If admin left, transfer admin to next player
+    if (this.admin === playerId) {
+      const remainingPlayers = Object.keys(this.players);
+      this.admin = remainingPlayers.length > 0 ? remainingPlayers[0] : null;
+    }
+    
     if (Object.keys(this.players).length === 0) {
       this.gameEnded = true;
     }
+  }
+
+  canDeletePlayer(adminId, targetPlayerId) {
+    return this.admin === adminId && this.players[targetPlayerId] && !this.gameStarted;
+  }
+
+  deletePlayer(adminId, targetPlayerId) {
+    if (!this.canDeletePlayer(adminId, targetPlayerId)) {
+      throw new Error('Only admin can delete players before game starts');
+    }
+    
+    this.removePlayer(targetPlayerId);
+    return true;
   }
 
   startGame() {
@@ -588,6 +620,7 @@ class PokerGame {
     return {
       roomCode: this.roomCode,
       players: this.players,
+      admin: this.admin,
       currentPlayer: this.currentPlayer,
       gameStarted: this.gameStarted,
       gameEnded: this.gameEnded,
@@ -639,7 +672,7 @@ io.on('connection', (socket) => {
     const game = new PokerGame(roomCode);
     
     try {
-      const player = game.addPlayer(data.playerId, data.playerName);
+      const player = game.addPlayer(data.playerId, data.playerName, true); // Creator is admin
       gameRooms.set(roomCode, game);
       
       socket.join(roomCode);
@@ -653,7 +686,7 @@ io.on('connection', (socket) => {
         playerName: data.playerName
       });
 
-      console.log(`Room ${roomCode} created by ${data.playerName}`);
+      console.log(`Room ${roomCode} created by ${data.playerName} (admin)`);
     } catch (error) {
       socket.emit('error', { message: error.message });
     }
@@ -741,6 +774,28 @@ io.on('connection', (socket) => {
       playerId: data.playerId,
       actions: validActions
     });
+  });
+
+  socket.on('deletePlayer', (data) => {
+    const game = gameRooms.get(data.roomCode);
+    if (!game) return;
+
+    try {
+      const success = game.deletePlayer(data.adminId, data.targetPlayerId);
+      if (success) {
+        const deletedPlayerName = data.targetPlayerName || 'Player';
+        
+        io.to(data.roomCode).emit('playerDeleted', {
+          deletedPlayerId: data.targetPlayerId,
+          deletedPlayerName: deletedPlayerName,
+          gameState: game.getGameState()
+        });
+
+        console.log(`Player ${deletedPlayerName} deleted from room ${data.roomCode}`);
+      }
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
   });
 
   socket.on('chatMessage', (data) => {
