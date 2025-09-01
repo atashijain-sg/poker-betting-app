@@ -515,6 +515,7 @@
                         <li><strong>Small Blind:</strong> $10</li>
                         <li><strong>Big Blind:</strong> $20</li>
                         <li><strong>Starting Chips:</strong> $1000</li>
+                        <li><strong>Rebuy:</strong> $1000 (when ≤$100)</li>
                         <li><strong>Blinds rotate:</strong> After each hand</li>
                         <li><strong>Session:</strong> 4 hours</li>
                     </ul>
@@ -524,7 +525,9 @@
                     <ul>
                         <li><strong>Remove players</strong> anytime</li>
                         <li><strong>Edit pot value</strong> manually</li>
-                        <li><strong>Set starting player</strong></li>
+                        <li><strong>Declare winner</strong> or split pot</li>
+                        <li><strong>Override moves</strong> (undo last action)</li>
+                        <li><strong>Set player order</strong> & starting player</li>
                         <li><strong>Reset/start games</strong></li>
                     </ul>
                 </div>
@@ -626,10 +629,33 @@
             <div class="betting-controls" id="winnerControls" style="display: none;">
                 <h3>🏆 Declare Winner (Admin Only)</h3>
                 <p style="font-size: 14px; margin-bottom: 10px;">Based on your physical cards, who won this hand?</p>
-                <select id="winnerSelect" class="bet-input" style="width: 200px; margin: 10px;">
-                    <option value="">Select winner...</option>
-                </select>
-                <button class="button" onclick="declareWinner()" style="background: #00cc00;">Declare Winner</button>
+                
+                <div style="margin: 10px 0;">
+                    <select id="winnerSelect" class="bet-input" style="width: 200px; margin: 5px;">
+                        <option value="">Select single winner...</option>
+                    </select>
+                    <button class="button" onclick="declareWinner()" style="background: #00cc00;">Declare Winner</button>
+                </div>
+                
+                <div style="margin: 10px 0; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 10px;">
+                    <h4 style="color: #ffcc00; margin-bottom: 5px;">Split Pot (Multiple Winners)</h4>
+                    <div id="splitWinnersList" style="margin: 5px 0;">
+                        <!-- Checkboxes for multiple winners -->
+                    </div>
+                    <button class="button" onclick="splitPot()" style="background: #ff9900;">Split Pot Equally</button>
+                </div>
+            </div>
+
+            <div class="betting-controls" id="rebuyControls" style="display: none;">
+                <h3>💰 Buy Back In</h3>
+                <p style="font-size: 14px; margin-bottom: 10px;">You're running low on chips. Buy back in for $1000?</p>
+                <button class="button" onclick="playerRebuy()" style="background: #00cc00;">Buy In ($1000)</button>
+            </div>
+
+            <div class="betting-controls" id="adminOverrideControls" style="display: none;">
+                <h3>⚠️ Admin Override (Admin Only)</h3>
+                <p style="font-size: 14px; margin-bottom: 10px;">Undo the last player action:</p>
+                <button class="button" onclick="overrideLastMove()" style="background: #ff4444;">Undo Last Move</button>
             </div>
 
             <div class="betting-history">
@@ -707,6 +733,8 @@
             updateStartingPlayerControls();
             updatePlayerOrderControls();
             updateWinnerControls();
+            updateRebuyControls();
+            updateAdminOverrideControls();
             updateAdminReclaimButton();
             
             if (data.isRejoining) {
@@ -812,6 +840,28 @@
             showSuccess(`👑 ${data.newAdminName} reclaimed admin privileges`);
         });
 
+        socket.on('potSplit', (data) => {
+            gameState = data.gameState;
+            updateGameDisplay();
+            showSuccess(`🏆 Pot split! Winners: ${data.winnerNames.join(', ')} ($${data.potWon} total)`);
+            playChime();
+            updateWinnerControls();
+        });
+
+        socket.on('playerRebought', (data) => {
+            gameState = data.gameState;
+            updateGameDisplay();
+            showSuccess(`💰 ${data.playerName} bought back in for $${data.rebuyAmount}`);
+            updateRebuyControls();
+        });
+
+        socket.on('moveOverridden', (data) => {
+            gameState = data.gameState;
+            updateGameDisplay();
+            showSuccess(`⚠️ Admin overrode ${data.overriddenPlayerName}'s ${data.originalAction}`);
+            updateAdminOverrideControls();
+        });
+
 
 
         socket.on('chatMessage', (data) => {
@@ -865,11 +915,49 @@
             }
             
             const winnerName = gameState.players[winnerId].name;
-            if (confirm(`🏆 Declare ${winnerName} as the winner?\n\nThey will receive the pot of $${gameState.pot}.`)) {
+            if (confirm(`🏆 Declare ${winnerName} as the winner?\n\nThey will receive the pot of $${gameState.pot}.\nNew hand will start automatically.`)) {
                 socket.emit('declareWinner', {
                     roomCode: currentRoomCode,
                     adminId: playerId,
                     winnerId: winnerId
+                });
+            }
+        }
+
+        function splitPot() {
+            const checkboxes = document.querySelectorAll('.split-winner-cb:checked');
+            if (checkboxes.length === 0) {
+                showError('Please select at least one winner for pot split');
+                return;
+            }
+            
+            const winnerIds = Array.from(checkboxes).map(cb => cb.value);
+            const winnerNames = winnerIds.map(id => gameState.players[id].name);
+            const splitAmount = Math.floor(gameState.pot / winnerIds.length);
+            
+            if (confirm(`🏆 Split pot equally between:\n${winnerNames.join(', ')}\n\nEach gets $${splitAmount}.\nNew hand will start automatically.`)) {
+                socket.emit('splitPot', {
+                    roomCode: currentRoomCode,
+                    adminId: playerId,
+                    winnerIds: winnerIds
+                });
+            }
+        }
+
+        function playerRebuy() {
+            if (confirm(`💰 Buy back in for $1000?\n\nThis will add $1000 to your chip stack.`)) {
+                socket.emit('playerRebuy', {
+                    roomCode: currentRoomCode,
+                    playerId: playerId
+                });
+            }
+        }
+
+        function overrideLastMove() {
+            if (confirm(`⚠️ Override the last player action?\n\nThis will undo the most recent move and give that player their turn back.`)) {
+                socket.emit('overrideMove', {
+                    roomCode: currentRoomCode,
+                    adminId: playerId
                 });
             }
         }
@@ -1125,6 +1213,8 @@
             updateBettingControls();
             updatePlayerOrderControls();
             updateWinnerControls();
+            updateRebuyControls();
+            updateAdminOverrideControls();
         }
 
         function updateStartingPlayerControls() {
@@ -1185,21 +1275,57 @@
         function updateWinnerControls() {
             const controls = document.getElementById('winnerControls');
             const select = document.getElementById('winnerSelect');
+            const splitList = document.getElementById('splitWinnersList');
             
             // Show controls only for admin during game with active pot
             if (gameState.admin === playerId && gameState.gameStarted && gameState.pot > 0) {
                 controls.style.display = 'block';
                 
-                // Update winner options (only non-folded players)
-                select.innerHTML = '<option value="">Select winner...</option>';
+                // Update single winner options (only non-folded players)
+                select.innerHTML = '<option value="">Select single winner...</option>';
+                splitList.innerHTML = '';
+                
                 Object.values(gameState.players || {}).forEach(player => {
                     if (!player.hasFolded) {
+                        // Single winner option
                         const option = document.createElement('option');
                         option.value = player.id;
                         option.textContent = `${player.name} ($${player.chips} chips)`;
                         select.appendChild(option);
+                        
+                        // Split winner checkbox
+                        const checkboxDiv = document.createElement('div');
+                        checkboxDiv.innerHTML = `
+                            <label style="display: flex; align-items: center; margin: 2px 0;">
+                                <input type="checkbox" value="${player.id}" style="margin-right: 8px;" class="split-winner-cb">
+                                ${player.name} ($${player.chips} chips)
+                            </label>
+                        `;
+                        splitList.appendChild(checkboxDiv);
                     }
                 });
+            } else {
+                controls.style.display = 'none';
+            }
+        }
+
+        function updateRebuyControls() {
+            const controls = document.getElementById('rebuyControls');
+            
+            // Show rebuy option if player has low chips (≤100)
+            if (gameState.players && gameState.players[playerId] && gameState.players[playerId].chips <= 100) {
+                controls.style.display = 'block';
+            } else {
+                controls.style.display = 'none';
+            }
+        }
+
+        function updateAdminOverrideControls() {
+            const controls = document.getElementById('adminOverrideControls');
+            
+            // Show override controls for admin when there are actions to override
+            if (gameState.admin === playerId && gameState.gameStarted) {
+                controls.style.display = 'block';
             } else {
                 controls.style.display = 'none';
             }

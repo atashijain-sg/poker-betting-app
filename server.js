@@ -250,10 +250,12 @@ class PokerGame {
     this.currentBet = 0;
     this.bettingRound = 0; // 0 = pre-flop, 1 = flop, 2 = turn, 3 = river
     this.bettingHistory = [];
+    this.actionHistory = []; // Store all actions for undo functionality
     this.smallBlind = 10;
     this.bigBlind = 20;
     this.dealerIndex = 0;
     this.playerOrder = []; // Custom player order set by admin
+    this.rebuyAmount = 1000; // Amount for rebuy
     this.createdAt = new Date();
     this.lastActivity = new Date();
     this.sessionTimeout = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
@@ -415,6 +417,141 @@ class PokerGame {
       newDealerIndex: this.dealerIndex,
       newHandStarted: true
     };
+  }
+
+  splitPot(adminId, winnerIds, customSplits = null) {
+    if (!this.canDeclareWinner(adminId)) {
+      throw new Error('Only admin can split pot during game');
+    }
+    
+    if (!winnerIds || winnerIds.length === 0) {
+      throw new Error('Must select at least one winner');
+    }
+    
+    // Validate all winners exist and haven't folded
+    for (const winnerId of winnerIds) {
+      if (!this.players[winnerId]) {
+        throw new Error(`Player ${winnerId} does not exist`);
+      }
+      if (this.players[winnerId].hasFolded) {
+        throw new Error(`Cannot award pot to folded player: ${this.players[winnerId].name}`);
+      }
+    }
+    
+    const potToSplit = this.pot;
+    const winnerNames = winnerIds.map(id => this.players[id].name);
+    
+    // Split pot
+    if (customSplits && customSplits.length === winnerIds.length) {
+      // Custom split amounts
+      let totalSplit = 0;
+      winnerIds.forEach((winnerId, index) => {
+        const splitAmount = customSplits[index];
+        this.players[winnerId].chips += splitAmount;
+        totalSplit += splitAmount;
+      });
+      
+      if (totalSplit !== potToSplit) {
+        throw new Error('Split amounts must equal pot value');
+      }
+    } else {
+      // Equal split
+      const splitAmount = Math.floor(potToSplit / winnerIds.length);
+      const remainder = potToSplit % winnerIds.length;
+      
+      winnerIds.forEach((winnerId, index) => {
+        const amount = splitAmount + (index < remainder ? 1 : 0); // Distribute remainder
+        this.players[winnerId].chips += amount;
+      });
+    }
+    
+    this.bettingHistory.push({
+      action: 'pot_split',
+      winnerIds: winnerIds,
+      winnerNames: winnerNames,
+      amount: potToSplit,
+      timestamp: new Date()
+    });
+    
+    // Advance dealer position and start new hand
+    this.dealerIndex = (this.dealerIndex + 1) % this.getPlayerOrder().length;
+    this.winner = null;
+    this.pot = 0;
+    this.startNewHand();
+    this.updateActivity();
+    
+    return {
+      winnerIds: winnerIds,
+      winnerNames: winnerNames,
+      potWon: potToSplit,
+      newDealerIndex: this.dealerIndex,
+      newHandStarted: true
+    };
+  }
+
+  canPlayerRebuy(playerId) {
+    return this.players[playerId] && this.players[playerId].chips <= 100; // Allow rebuy when low on chips
+  }
+
+  playerRebuy(playerId, amount = null) {
+    if (!this.canPlayerRebuy(playerId)) {
+      throw new Error('Player has enough chips or does not exist');
+    }
+    
+    const rebuyAmount = amount || this.rebuyAmount;
+    this.players[playerId].chips += rebuyAmount;
+    
+    this.bettingHistory.push({
+      action: 'rebuy',
+      playerId: playerId,
+      playerName: this.players[playerId].name,
+      amount: rebuyAmount,
+      timestamp: new Date()
+    });
+    
+    this.updateActivity();
+    return rebuyAmount;
+  }
+
+  canOverrideMove(adminId) {
+    return this.admin === adminId && this.actionHistory.length > 0;
+  }
+
+  overrideLastMove(adminId) {
+    if (!this.canOverrideMove(adminId)) {
+      throw new Error('Only admin can override moves and there must be a move to override');
+    }
+    
+    const lastAction = this.actionHistory.pop();
+    if (!lastAction) {
+      throw new Error('No action to override');
+    }
+    
+    // Restore previous game state
+    const player = this.players[lastAction.playerId];
+    if (player) {
+      player.chips = lastAction.previousChips;
+      player.currentBet = lastAction.previousCurrentBet;
+      player.totalBet = lastAction.previousTotalBet;
+      player.hasFolded = lastAction.previousHasFolded;
+      player.isActive = lastAction.previousIsActive;
+      player.hasActed = lastAction.previousHasActed;
+    }
+    
+    this.pot = lastAction.previousPot;
+    this.currentBet = lastAction.previousCurrentBet;
+    this.currentPlayer = lastAction.playerId; // Give turn back to overridden player
+    
+    this.bettingHistory.push({
+      action: 'move_overridden',
+      playerId: lastAction.playerId,
+      playerName: player ? player.name : 'Unknown',
+      originalAction: lastAction.action,
+      timestamp: new Date()
+    });
+    
+    this.updateActivity();
+    return lastAction;
   }
 
   updateActivity() {
@@ -610,6 +747,22 @@ class PokerGame {
     if (!validActions.includes(action)) {
       throw new Error(`Invalid action: ${action}`);
     }
+
+    // Store action history for undo functionality
+    this.actionHistory.push({
+      playerId: playerId,
+      action: action,
+      amount: amount,
+      previousChips: player.chips,
+      previousCurrentBet: player.currentBet,
+      previousTotalBet: player.totalBet,
+      previousHasFolded: player.hasFolded,
+      previousIsActive: player.isActive,
+      previousHasActed: player.hasActed,
+      previousPot: this.pot,
+      previousCurrentBet: this.currentBet,
+      timestamp: new Date()
+    });
 
     let betAmount = 0;
     const callAmount = this.currentBet - player.currentBet;
@@ -1147,6 +1300,77 @@ io.on('connection', (socket) => {
         console.log(`Admin reclaimed by: ${globalGame.players[data.playerId].name}`);
         saveGame();
       }
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  socket.on('splitPot', (data) => {
+    if (!globalGame) return;
+
+    try {
+      const result = globalGame.splitPot(data.adminId, data.winnerIds, data.customSplits);
+      
+      io.to(ROOM_CODE).emit('potSplit', {
+        winnerIds: result.winnerIds,
+        winnerNames: result.winnerNames,
+        potWon: result.potWon,
+        newDealerIndex: result.newDealerIndex,
+        gameState: globalGame.getGameState()
+      });
+
+      // Auto-start new hand after pot split
+      if (result.newHandStarted) {
+        setTimeout(() => {
+          io.to(ROOM_CODE).emit('newHandStarted', {
+            gameState: globalGame.getGameState(),
+            autoStarted: true
+          });
+        }, 2000);
+      }
+
+      console.log(`Pot split between: ${result.winnerNames.join(', ')} - $${result.potWon}`);
+      saveGame();
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  socket.on('playerRebuy', (data) => {
+    if (!globalGame) return;
+
+    try {
+      const rebuyAmount = globalGame.playerRebuy(data.playerId, data.amount);
+      
+      io.to(ROOM_CODE).emit('playerRebought', {
+        playerId: data.playerId,
+        playerName: globalGame.players[data.playerId].name,
+        rebuyAmount: rebuyAmount,
+        gameState: globalGame.getGameState()
+      });
+
+      console.log(`${globalGame.players[data.playerId].name} rebought for $${rebuyAmount}`);
+      saveGame();
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  socket.on('overrideMove', (data) => {
+    if (!globalGame) return;
+
+    try {
+      const overriddenAction = globalGame.overrideLastMove(data.adminId);
+      
+      io.to(ROOM_CODE).emit('moveOverridden', {
+        overriddenPlayerId: overriddenAction.playerId,
+        overriddenPlayerName: globalGame.players[overriddenAction.playerId].name,
+        originalAction: overriddenAction.action,
+        gameState: globalGame.getGameState()
+      });
+
+      console.log(`Move overridden: ${overriddenAction.action} by ${globalGame.players[overriddenAction.playerId].name}`);
+      saveGame();
     } catch (error) {
       socket.emit('error', { message: error.message });
     }
